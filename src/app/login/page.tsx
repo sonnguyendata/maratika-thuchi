@@ -1,5 +1,6 @@
+'use client';                  // <-- must be first
+
 export const dynamic = 'force-dynamic';
-'use client';
 
 import { useCallback, useMemo, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
@@ -17,7 +18,7 @@ export default function LoginPage() {
   const signIn = useCallback(async () => {
     try {
       if (!env.ok) {
-        setMsg('Missing Supabase env. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY on Vercel.');
+        setMsg('Missing Supabase env. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY on Vercel.');
         return;
       }
       const supabase = createClient(env.url!, env.key!);
@@ -26,12 +27,9 @@ export default function LoginPage() {
 
       const { error } = await supabase.auth.signInWithOtp({
         email,
-        options: {
-          emailRedirectTo: `${window.location.origin}/`,
-        },
+        options: { emailRedirectTo: `${window.location.origin}/` },
       });
-      if (error) setMsg(error.message);
-      else setMsg('Check your email for the login link.');
+      setMsg(error ? error.message : 'Check your email for the login link.');
     } catch (e: any) {
       setMsg(e?.message ?? 'Unexpected error');
     }
@@ -41,17 +39,17 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center p-6">
       <div className="max-w-md w-full space-y-4">
         <h1 className="text-2xl font-semibold">Sign in</h1>
+
         {!env.ok && (
           <div className="p-3 rounded border text-sm">
             Missing env vars. Add <code>NEXT_PUBLIC_SUPABASE_URL</code> and <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> in Vercel → Project → Settings → Environment Variables.
           </div>
         )}
-        <button
-          onClick={signIn}
-          className="px-4 py-2 rounded bg-black text-white w-full"
-        >
+
+        <button onClick={signIn} className="px-4 py-2 rounded bg-black text-white w-full">
           Send magic link
         </button>
+
         {msg && <div className="text-sm text-gray-700">{msg}</div>}
       </div>
     </div>
