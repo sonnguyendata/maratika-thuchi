@@ -1,4 +1,4 @@
-'use client';                  // <-- must be first
+'use client';
 
 export const dynamic = 'force-dynamic';
 
