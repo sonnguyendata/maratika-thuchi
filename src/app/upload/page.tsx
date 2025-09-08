@@ -1,9 +1,9 @@
 'use client';
 import { useState } from 'react';
-import { createClient } from '@/lib/supabaseClient';
+import { supabaseServerAdmin } from '@/lib/supabaseServer';
 
 export default function UploadPage() {
-  const supabase = createClient();
+  const supabase = supabaseServerAdmin();
   const [file, setFile] = useState<File | null>(null);
   const [accountName, setAccountName] = useState('Main Account');
   const [status, setStatus] = useState('');

@@ -1,8 +1,8 @@
 'use client';
-import { createClient } from '@/lib/supabaseClient';
+import { supabaseServerAdmin } from '@/lib/supabaseServer';
 
 export default function LoginPage() {
-  const supabase = createClient();
+  const supabase = supabaseServerAdmin();
   const signIn = async () => {
     const email = prompt('Enter email for magic link:');
     if (email) {
