@@ -12,7 +12,7 @@ export default function UploadPage() {
     if (!file) return alert('Choose a PDF first.');
     setStatus('Uploading...');
     const key = `statements/${new Date().toISOString().slice(0,10)}/${crypto.randomUUID()}.pdf`;
-    const { data, error } = await supabase.storage.from('statements').upload(key, file);
+    const { data: _data, error } = await supabase.storage.from('statements').upload(key, file);
     if (error) { setStatus(error.message); return; }
     setStatus('Uploaded. Creating batch...');
     const res = await fetch('/api/statements/create', {

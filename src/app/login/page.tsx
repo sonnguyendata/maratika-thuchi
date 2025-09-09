@@ -28,9 +28,10 @@ export default function LoginPage() {
         options: { emailRedirectTo: `${window.location.origin}/` },
       });
       setMsg(error ? error.message : 'Check your email for the login link.');
-    } catch (e: any) {
-      setMsg(e?.message ?? 'Unexpected error');
-    }
+   } catch (e: unknown) {
+  const msg = e instanceof Error ? e.message : 'Unexpected error';
+  setMsg(msg);
+}
   }, [env]);
 
   return (
