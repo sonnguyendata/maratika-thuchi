@@ -1,59 +1,78 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-function getEnv() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  return { url, key, ok: Boolean(url && key) };
-}
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 export default function LoginPage() {
-  const [msg, setMsg] = useState<string>('');
-  const env = useMemo(getEnv, []);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
 
-  const signIn = useCallback(async () => {
-    try {
-      if (!env.ok) {
-        setMsg('Missing Supabase env. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY on Vercel.');
-        return;
-      }
-      const supabase = createClient(env.url!, env.key!);
-      const email = prompt('Enter email for magic link:');
-      if (!email) return;
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setMessage(null);
 
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: { emailRedirectTo: `${window.location.origin}/` },
-      });
-      setMsg(error ? error.message : 'Check your email for the login link.');
-   } catch (e: unknown) {
-  const msg = e instanceof Error ? e.message : 'Unexpected error';
-  setMsg(msg);
-}
-  }, [env]);
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      setMessage(`❌ ${error.message}`);
+    } else {
+      setMessage('✅ Login successful! Redirecting...');
+      // Redirect to admin dashboard
+      window.location.href = '/admin';
+    }
+
+    setLoading(false);
+  };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6">
-      <div className="max-w-md w-full space-y-4">
-        <h1 className="text-2xl font-semibold">Sign in</h1>
+    <div className="flex items-center justify-center h-screen bg-gray-100">
+      <form
+        onSubmit={handleLogin}
+        className="bg-white p-8 shadow-lg rounded-lg w-96 space-y-4"
+      >
+        <h1 className="text-2xl font-bold text-center">Login</h1>
 
-        {!env.ok && (
-          <div className="p-3 rounded border text-sm">
-            Missing env vars. Add <code>NEXT_PUBLIC_SUPABASE_URL</code> and <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> in Vercel → Project → Settings → Environment Variables.
-          </div>
-        )}
+        <input
+          type="email"
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+          required
+        />
+
+        <input
+          type="password"
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+          required
+        />
 
         <button
-          onClick={signIn}
-          className="px-4 py-2 rounded bg-black text-white w-full"
+          type="submit"
+          disabled={loading}
+          className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 disabled:opacity-50"
         >
-          Send magic link
+          {loading ? 'Logging in...' : 'Login'}
         </button>
 
-        {msg && <div className="text-sm text-gray-700">{msg}</div>}
-      </div>
+        {message && (
+          <p className="text-center text-sm mt-2 text-gray-700">{message}</p>
+        )}
+      </form>
     </div>
   );
 }
