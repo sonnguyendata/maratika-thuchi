@@ -1,6 +1,5 @@
 // src/app/api/parse/route.ts (only the imports shown here)
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseServerAdmin } from '@/lib/supabaseServer';
 import pdf from 'pdf-parse';
 import { sha256 } from 'js-sha256';
 

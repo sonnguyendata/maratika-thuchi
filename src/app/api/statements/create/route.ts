@@ -1,36 +1,32 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { supabaseServerAdmin } from '@/lib/supabaseServer';
+// src/app/api/statements/create/route.ts
+import { NextResponse } from 'next/server';
+//import { supabaseServerAdmin } from '@/lib/supabaseServer';
+import pdf from 'pdf-parse'; // if you parse PDFs here
 
-export async function POST(req: NextRequest) {
-  const { accountName, filePath } = await req.json();
+export async function POST(req: Request) {
+  try {
+    const form = await req.formData();
+    const file = form.get('file') as File | null;
+    const accountName = (form.get('accountName') as string | null)?.trim();
 
-  if (!accountName || !filePath) {
-    return NextResponse.json({ error: 'accountName and filePath are required' }, { status: 400 });
+    if (!file || !accountName) {
+      return NextResponse.json({ error: 'Missing file or accountName' }, { status: 400 });
+    }
+
+    // Example: read bytes for parsing
+    const buf = Buffer.from(await file.arrayBuffer());
+
+    // Parse PDF…
+    // const parsed = await pdf(buf);
+    // const txns = parseYourBankText(parsed.text);
+
+    // Insert to DB, etc.
+    const supa = supabaseServerAdmin();
+    // await supa.from('statements').insert(...);
+    // await supa.from('transactions').insert(txns);
+
+    return NextResponse.json({ ok: true, inserted: /* txns.length */ 0 });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message ?? 'Server error' }, { status: 500 });
   }
-
-  const supabase = supabaseServerAdmin();
-
-  // Ensure account exists (upsert by unique name)
-  const { data: account, error: accErr } = await supabase
-    .from('accounts')
-    .upsert({ name: accountName }, { onConflict: 'name' })
-    .select()
-    .single();
-
-  if (accErr || !account) {
-    return NextResponse.json({ error: accErr?.message ?? 'Account upsert failed' }, { status: 400 });
-  }
-
-  // Create upload batch
-  const { data: stmt, error: stErr } = await supabase
-    .from('statement_uploads')
-    .insert({ account_id: account.id, file_path: filePath })
-    .select()
-    .single();
-
-  if (stErr || !stmt) {
-    return NextResponse.json({ error: stErr?.message ?? 'Could not create statement upload' }, { status: 400 });
-  }
-
-  return NextResponse.json({ statementId: stmt.id });
 }
