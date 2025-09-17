@@ -1,14 +1,11 @@
 // src/app/api/statements/create/route.ts
+export const runtime = 'nodejs';          // IMPORTANT: pdf-parse needs Node runtime
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import pdf from 'pdf-parse';
 import { supabaseServerAdmin } from '@/lib/supabaseServer';
 
-/**
- * POST /api/statements/create
- * FormData:
- *  - file: PDF
- *  - accountName: string (e.g., "Cherry's Techcombank")
- */
 export async function POST(req: NextRequest) {
   try {
     const form = await req.formData();
@@ -25,7 +22,6 @@ export async function POST(req: NextRequest) {
     const buf = Buffer.from(await file.arrayBuffer());
     const fileName = file.name || 'statement.pdf';
 
-    // 1) Insert a minimal statement row first (so we have statement_id)
     const supa = supabaseServerAdmin();
     const { data: stmtIns, error: stmtErr } = await supa
       .from('statements')
@@ -40,21 +36,22 @@ export async function POST(req: NextRequest) {
     if (stmtErr || !stmtIns) {
       return NextResponse.json({ error: 'Failed to create statement', details: stmtErr }, { status: 500 });
     }
-
     const statementId = stmtIns.id as number;
 
-    // 2) Parse the PDF text
+    // Parse PDF
     const parsed = await pdf(buf);
     const text = parsed.text || '';
 
-    // 3) Very simple line parser:
-    //    Looks for lines that start with a date, then has description, then an amount.
-    //    Adjust this for your bank’s exact layout as needed.
+    // Simple heuristic parser (adjust later to your bank format)
     const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+
+    const dateRe =
+      /^(?<d>\d{1,2})[\/\-](?<m>\d{1,2})[\/\-](?<y>\d{4})\b|^(?<y2>\d{4})-(?<m2>\d{2})-(?<d2>\d{2})\b/;
+    const amtRe = /[-+]?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})|\d+(?:\.\d{1,2})/;
 
     type Row = {
       statement_id: number;
-      trx_date: string;         // YYYY-MM-DD
+      trx_date: string;
       description: string | null;
       credit: number;
       debit: number;
@@ -64,20 +61,11 @@ export async function POST(req: NextRequest) {
 
     const candidates: Row[] = [];
 
-    // Match dates like: 15/08/2025 or 15-08-2025 or 2025-08-15
-    const dateRe =
-      /^(?<d>\d{1,2})[\/\-](?<m>\d{1,2})[\/\-](?<y>\d{4})\b|^(?<y2>\d{4})-(?<m2>\d{2})-(?<d2>\d{2})\b/;
-
-    // Match amount like: 1,234.56 or -1,234.56
-    const amtRe = /[-+]?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})|\d+(?:\.\d{1,2})/;
-
     for (const line of lines) {
       const dMatch = line.match(dateRe);
       const aMatch = line.match(amtRe);
-
       if (!dMatch || !aMatch) continue;
 
-      // Normalize date to YYYY-MM-DD
       let y: string, m: string, d: string;
       if (dMatch.groups?.y2) {
         y = dMatch.groups.y2;
@@ -91,22 +79,16 @@ export async function POST(req: NextRequest) {
       }
       const trx_date = `${y}-${m}-${d}`;
 
-      // Pull description = line minus the date and the 1st amount we found
-      const lineNoDate = line.replace(dateRe, '').trim();
-      let description = lineNoDate;
-      // if the amount appears at the end, try to remove it from description tail
       const amtStr = aMatch[0];
-      const tail = description.lastIndexOf(amtStr);
-      if (tail >= 0) {
-        description = description.slice(0, tail).trim();
-      }
-      if (!description) description = null;
-
-      // Normalize amount
       const raw = amtStr.replace(/,/g, '');
       const amt = Number(raw);
       const credit = amt >= 0 ? amt : 0;
       const debit = amt < 0 ? Math.abs(amt) : 0;
+
+      let description = line.replace(dateRe, '').trim();
+      const tail = description.lastIndexOf(amtStr);
+      if (tail >= 0) description = description.slice(0, tail).trim();
+      if (!description) description = null;
 
       candidates.push({
         statement_id: statementId,
@@ -119,11 +101,9 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 4) Insert in batches; rely on trigger to fill unique_key; dedupe via upsert on unique_key
-    //    (We created a UNIQUE index on unique_key earlier.)
+    // Insert (upsert on unique_key)
     const batchSize = 500;
     let inserted = 0;
-
     for (let i = 0; i < candidates.length; i += batchSize) {
       const slice = candidates.slice(i, i + batchSize);
       if (!slice.length) continue;
@@ -133,8 +113,7 @@ export async function POST(req: NextRequest) {
         .upsert(slice, { onConflict: 'unique_key', ignoreDuplicates: true, count: 'exact' });
 
       if (insErr) {
-        // If parsing is imperfect, we still want to keep the statement row.
-        // Return partial success with details.
+        // Return partial success as JSON (still JSON!)
         return NextResponse.json(
           {
             statement_id: statementId,
@@ -143,7 +122,7 @@ export async function POST(req: NextRequest) {
             error: 'Insert error',
             details: insErr,
           },
-          { status: 207 } // Multi-Status: partial success
+          { status: 207 }
         );
       }
       inserted += count ?? 0;
@@ -153,9 +132,10 @@ export async function POST(req: NextRequest) {
       statement_id: statementId,
       parsed_rows: candidates.length,
       inserted_rows: inserted,
-      message: 'OK',
+      ok: true,
     });
   } catch (e: any) {
+    // Always return JSON on error
     return NextResponse.json({ error: e?.message ?? 'Unknown error' }, { status: 500 });
   }
 }
