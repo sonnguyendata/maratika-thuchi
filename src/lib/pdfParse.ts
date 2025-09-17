@@ -11,8 +11,8 @@ export async function getPdfParse(): Promise<PdfParseFn> {
   if (!loadingParserPromise) {
     loadingParserPromise = (async () => {
       try {
-        const pdfModule = await import('pdf-parse');
-        const parser = pdfModule?.default;
+        const pdfModule = await import('pdf-parse/lib/pdf-parse.js');
+        const parser = pdfModule?.default ?? pdfModule;
 
         if (typeof parser !== 'function') {
           throw new Error('`pdf-parse` default export is not a function');
