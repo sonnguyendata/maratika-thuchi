@@ -1,130 +1,99 @@
-'use client';
+// src/app/admin/page.tsx
+import { redirect } from 'next/navigation';
+import Link from 'next/link';
+import { supabaseServer } from '@/lib/supabaseServer';
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
+export const dynamic = 'force-dynamic'; // ensure cookies/session are read fresh
 
-type Summary = { total_in: number; total_out: number; net: number; };
+export default async function AdminPage() {
+  const supabase = supabaseServer();
 
-export default function AdminHome() {
-  const [role, setRole] = useState<string | null>(null);
-  const [email, setEmail] = useState<string | null>(null);
-  const [summary, setSummary] = useState<Summary | null>(null);
-  const [err, setErr] = useState("");
+  // 1) Check session (server-side)
+  const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession();
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const me = await fetch("/api/me").then(r => r.json());
-        setRole(me?.role ?? null);
-        setEmail(me?.user?.email ?? null);
-        const s = await fetch("/api/reports/summary").then(r => r.json());
-        if (s?.error) throw new Error(s.error);
-        setSummary(s);
-      } catch (e: any) {
-        setErr(e?.message ?? "Failed to load");
-      }
-    })();
-  }, []);
+  if (sessionError) {
+    // If something went wrong reading the session, treat like unauthenticated
+    redirect('/login');
+  }
 
-  if (role !== "admin") {
-    return (
-      <div className="p-6 space-y-4">
-        <h1 className="text-2xl font-semibold">Admin</h1>
-        <div className="p-3 border rounded bg-amber-50">
-          {email
-            ? <>Your account <b>{email}</b> is not an admin. Please ask an admin to grant access.</>
-            : <>You’re not signed in. Please <Link className="underline" href="/login">log in</Link>.</>}
-        </div>
-      </div>
-    );
+  if (!session) {
+    redirect('/login');
+  }
+
+  // 2) Check role from profiles
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('role, full_name')
+    .eq('user_id', session.user.id)
+    .maybeSingle();
+
+  // If no profile row yet, or any error, block access
+  if (profileError || !profile || profile.role !== 'admin') {
+    redirect('/'); // or redirect('/login') — your choice
   }
 
   return (
-    <div className="p-6 space-y-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Admin Dashboard</h1>
-        <div className="text-sm text-gray-500">Signed in as {email}</div>
-      </div>
+    <main className="mx-auto max-w-5xl px-6 py-10">
+      <h1 className="text-2xl font-semibold">
+        Admin Dashboard{profile?.full_name ? ` — ${profile.full_name}` : ''}
+      </h1>
+      <p className="mt-2 text-sm text-gray-500">
+        You are signed in as <span className="font-medium">{session.user.email}</span>.
+      </p>
 
-      {/* Top KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Kpi title="Total In" value={summary?.total_in} />
-        <Kpi title="Total Out" value={summary?.total_out} />
-        <Kpi title="Net" value={summary?.net} />
-      </div>
-
-      {/* Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        <ActionCard
-          title="Upload Bank Statement (PDF)"
-          desc="Parse PDF, store file, and insert transactions. Duplicates auto-skip."
+      <section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <AdminCard
+          title="Upload Statement"
+          desc="Import a bank PDF and parse to transactions."
           href="/upload"
-          cta="Go to Upload"
         />
-        <ActionCard
-          title="Categorize & Hide Transactions"
-          desc="Assign categories, hide non-report items, search & filter."
+        <AdminCard
+          title="Transactions"
+          desc="Review, hide, and categorize transactions."
           href="/admin/transactions"
-          cta="Manage Transactions"
         />
-        <ActionCard
-          title="Manage Categories"
-          desc="Create, rename, delete categories and set targets."
+        <AdminCard
+          title="Categories"
+          desc="Create and manage categories & targets."
           href="/admin/categories"
-          cta="Manage Categories"
         />
-        <ActionCard
+        <AdminCard
           title="Reports"
-          desc="Totals and by-category breakdowns."
+          desc="Totals in/out, by category, and details."
           href="/reports"
-          cta="View Reports"
         />
-        <ActionCard
-          title="Export Data (coming soon)"
-          desc="CSV export for sharing or backups."
-          href="#"
-          cta="(Soon)"
-          disabled
+        <AdminCard
+          title="Users"
+          desc="Create, edit, or delete application users."
+          href="/admin/users"
         />
-        <ActionCard
-          title="User Access (coming soon)"
-          desc="Grant admin role to a signed-up user."
-          href="#"
-          cta="(Soon)"
-          disabled
-        />
-      </div>
-
-      {err && <div className="p-3 border rounded text-red-600">{err}</div>}
-    </div>
+      </section>
+    </main>
   );
 }
 
-function Kpi({ title, value }: { title: string; value?: number | null }) {
+function AdminCard({
+  title,
+  desc,
+  href,
+}: {
+  title: string;
+  desc: string;
+  href: string;
+}) {
   return (
-    <div className="p-4 border rounded">
-      <div className="text-sm text-gray-500">{title}</div>
-      <div className="text-2xl font-bold">{value != null ? value.toLocaleString() : "-"}</div>
-    </div>
-  );
-}
-
-function ActionCard({
-  title, desc, href, cta, disabled,
-}: { title: string; desc: string; href: string; cta: string; disabled?: boolean }) {
-  return (
-    <div className={`p-5 border rounded-lg ${disabled ? 'opacity-50' : ''}`}>
-      <div className="text-lg font-semibold">{title}</div>
-      <p className="text-sm text-gray-600 mt-2">{desc}</p>
-      <div className="mt-4">
-        {disabled ? (
-          <button className="px-3 py-2 border rounded cursor-not-allowed">{cta}</button>
-        ) : (
-          <Link href={href} className="px-3 py-2 border rounded hover:bg-gray-50 inline-block">
-            {cta}
-          </Link>
-        )}
-      </div>
-    </div>
+    <Link
+      href={href}
+      className="rounded-2xl border border-gray-200 p-5 shadow-sm transition hover:shadow-md"
+    >
+      <h2 className="text-lg font-medium">{title}</h2>
+      <p className="mt-1 text-sm text-gray-600">{desc}</p>
+      <span className="mt-3 inline-block text-sm font-medium text-blue-600">
+        Open →
+      </span>
+    </Link>
   );
 }
