@@ -36,7 +36,7 @@ export default async function AdminPage() {
         </header>
 
         <section className="grid gap-4 sm:grid-cols-2">
-          <Card href="/upload" title="Upload statement" desc="Parse a bank statement PDF and store transactions." />
+          <Card href="/admin/upload" title="Upload statement" desc="Parse a bank statement PDF and store transactions." />
           <Card href="/admin/categories" title="Manage categories" desc="Create, edit or delete categories." />
           <Card href="/admin/users" title="Manage users" desc="Create, edit or delete app users." />
           <Card href="/reports" title="Reports" desc="View monthly summaries and category breakdowns." />
