@@ -1,9 +1,10 @@
 // src/app/api/parse/route.ts (only the imports shown here)
-import { NextRequest, NextResponse } from 'next/server';
-import pdf from 'pdf-parse';
-import { sha256 } from 'js-sha256';
-import { supabaseServerAdmin } from '@/lib/supabaseServer';
+export const runtime = 'nodejs';
 
+import { NextRequest, NextResponse } from 'next/server';
+import { sha256 } from 'js-sha256';
+import { getPdfParse } from '@/lib/pdfParse';
+import { supabaseServerAdmin } from '@/lib/supabaseServer';
 
 export async function POST(req: NextRequest) {
   try {
@@ -34,7 +35,8 @@ export async function POST(req: NextRequest) {
     // Parse the PDF file
     const pdfArrayBuffer = await fileData.arrayBuffer();
     const pdfBuffer = Buffer.from(pdfArrayBuffer);
-    const pdfText = await pdf(pdfBuffer);
+    const parsePdf = await getPdfParse();
+    const pdfText = await parsePdf(pdfBuffer);
 
     // TODO: Implement actual parsing logic
     const newStatements = [];
