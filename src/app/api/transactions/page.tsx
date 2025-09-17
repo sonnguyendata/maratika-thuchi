@@ -1,130 +1,84 @@
-'use client';
+// src/app/admin/transactions/page.tsx
+import 'server-only';
+import { supabaseServer } from '@/lib/supabaseServer';
+import { redirect } from 'next/navigation';
 
-import { useEffect, useMemo, useState } from "react";
+export const dynamic = 'force-dynamic';
 
-type Tx = {
-  id: number;
-  trx_date: string;
-  description: string | null;
-  credit: number | null;
-  debit: number | null;
-  balance: number | null;
-  transaction_no: string | null;
-  category_id: number | null;
-  hidden: boolean | null;
-};
+export default async function AdminTransactionsPage() {
+  const supa = supabaseServer();
 
-type Category = { id: number; name: string; type: 'income'|'expense' };
+  // Gate: must be signed in
+  const { data: { user } } = await supa.auth.getUser();
+  if (!user) redirect('/login');
 
-export default function AdminTransactionsPage() {
-  const [rows, setRows] = useState<Tx[]>([]);
-  const [cats, setCats] = useState<Category[]>([]);
-  const [q, setQ] = useState("");
-  const [onlyUncat, setOnlyUncat] = useState(false);
-  const [err, setErr] = useState("");
+  // Latest statement
+  const { data: latestStmt, error: stmtErr } = await supa
+    .from('statements')
+    .select('id, account_name, file_name, created_at')
+    .order('id', { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
-  const filtered = useMemo(() => {
-    return rows.filter(r => {
-      if (onlyUncat && r.category_id) return false;
-      if (!q) return true;
-      const hay = `${r.description ?? ""} ${r.transaction_no ?? ""}`.toLowerCase();
-      return hay.includes(q.toLowerCase());
-    });
-  }, [rows, q, onlyUncat]);
+  if (stmtErr) {
+    return <div className="p-6 text-red-600">Error loading statement: {stmtErr.message}</div>;
+  }
+  if (!latestStmt) {
+    return <div className="p-6">No statements yet. Upload one from the Admin dashboard.</div>;
+  }
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const [txr, cr] = await Promise.all([
-          fetch("/api/admin/transactions/list").then(r => r.json()),
-          fetch("/api/admin/categories/list").then(r => r.json()),
-        ]);
-        if (txr?.error) throw new Error(txr.error);
-        if (cr?.error) throw new Error(cr.error);
-        setRows(txr);
-        setCats(cr);
-      } catch (e: any) {
-        setErr(e?.message ?? "Failed to load");
-      }
-    })();
-  }, []);
+  // Transactions for that statement
+  const { data: txs, error: txErr } = await supa
+    .from('transactions')
+    .select('id, trx_date, description, credit, debit, balance, transaction_no, unique_key')
+    .eq('statement_id', latestStmt.id)
+    .order('trx_date', { ascending: true })
+    .order('id', { ascending: true });
 
-  async function saveRow(id: number, patch: Partial<Tx>) {
-    const res = await fetch(`/api/transactions/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patch),
-    }).then(r => r.json());
-    if (res?.error) alert(res.error);
-    setRows(prev => prev.map(x => x.id === id ? { ...x, ...patch } as Tx : x));
+  if (txErr) {
+    return <div className="p-6 text-red-600">Error loading transactions: {txErr.message}</div>;
   }
 
   return (
     <div className="p-6 space-y-4">
-      <h1 className="text-2xl font-semibold">Admin • Transactions</h1>
-
-      {err && <div className="p-3 border rounded text-red-600">{err}</div>}
-
-      <div className="flex gap-3">
-        <input
-          className="border rounded px-3 py-2 w-full"
-          placeholder="Search description / transaction no…"
-          value={q}
-          onChange={e => setQ(e.target.value)}
-        />
-        <label className="inline-flex items-center gap-2">
-          <input type="checkbox" checked={onlyUncat} onChange={e => setOnlyUncat(e.target.checked)} />
-          Only uncategorized
-        </label>
+      <h1 className="text-xl font-semibold">Transactions – Latest Statement</h1>
+      <div className="text-sm text-gray-600">
+        <div><span className="font-medium">Statement ID:</span> {latestStmt.id}</div>
+        <div><span className="font-medium">Account:</span> {latestStmt.account_name}</div>
+        <div><span className="font-medium">File:</span> {latestStmt.file_name}</div>
+        <div><span className="font-medium">Uploaded:</span> {new Date(latestStmt.created_at).toLocaleString()}</div>
       </div>
 
-      <div className="border rounded overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="text-left p-2">Date</th>
-              <th className="text-left p-2">Description</th>
-              <th className="text-right p-2">Credit</th>
-              <th className="text-right p-2">Debit</th>
-              <th className="text-left p-2">Category</th>
-              <th className="text-center p-2">Hidden</th>
-              <th className="text-right p-2">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map(r => (
-              <tr key={r.id} className="border-t">
-                <td className="p-2 whitespace-nowrap">{r.trx_date}</td>
-                <td className="p-2">{r.description}</td>
-                <td className="p-2 text-right">{(r.credit ?? 0).toLocaleString()}</td>
-                <td className="p-2 text-right">{(r.debit ?? 0).toLocaleString()}</td>
-                <td className="p-2">
-                  <select
-                    className="border rounded px-2 py-1"
-                    value={String(r.category_id ?? "")}
-                    onChange={e => saveRow(r.id, { category_id: e.target.value ? Number(e.target.value) : null })}
-                  >
-                    <option value="">— choose —</option>
-                    {cats.map(c => (
-                      <option key={c.id} value={c.id}>{c.name} ({c.type})</option>
-                    ))}
-                  </select>
-                </td>
-                <td className="p-2 text-center">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(r.hidden)}
-                    onChange={e => saveRow(r.id, { hidden: e.target.checked })}
-                  />
-                </td>
-                <td className="p-2 text-right">
-                  <code className="text-xs text-gray-500">#{r.id}</code>
-                </td>
+      {!txs?.length ? (
+        <div className="text-gray-600">No transactions parsed for this statement yet.</div>
+      ) : (
+        <div className="overflow-auto rounded border">
+          <table className="min-w-full text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-3 py-2 text-left">Date</th>
+                <th className="px-3 py-2 text-left">Description</th>
+                <th className="px-3 py-2 text-right">Credit</th>
+                <th className="px-3 py-2 text-right">Debit</th>
+                <th className="px-3 py-2 text-right">Balance</th>
+                <th className="px-3 py-2 text-left">Txn No</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {txs.map(t => (
+                <tr key={t.id} className="border-t">
+                  <td className="px-3 py-2">{t.trx_date}</td>
+                  <td className="px-3 py-2">{t.description ?? ''}</td>
+                  <td className="px-3 py-2 text-right">{t.credit?.toLocaleString()}</td>
+                  <td className="px-3 py-2 text-right">{t.debit?.toLocaleString()}</td>
+                  <td className="px-3 py-2 text-right">{t.balance ?? ''}</td>
+                  <td className="px-3 py-2">{t.transaction_no ?? ''}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
