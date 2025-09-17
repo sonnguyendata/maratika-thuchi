@@ -1,87 +1,165 @@
 // src/app/api/statements/create/route.ts
-export const runtime = 'nodejs';          // IMPORTANT: pdf-parse needs Node runtime
+export const runtime = 'nodejs'; // IMPORTANT: pdf-parse needs Node runtime
 export const dynamic = 'force-dynamic';
 
-import { NextRequest, NextResponse } from 'next/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { NextResponse } from 'next/server';
 import pdf from 'pdf-parse';
 import { supabaseServerAdmin } from '@/lib/supabaseServer';
 
-export async function POST(req: NextRequest) {
+type ParsePdfFn = (buffer: Buffer) => Promise<{ text?: string }>; // compatible with pdf-parse result
+
+export type StatementUploadDependencies = {
+  createSupabaseClient: () => SupabaseClient<unknown, unknown, unknown>;
+  parsePdf: ParsePdfFn;
+  now: () => Date;
+};
+
+function createMockDependencies(): StatementUploadDependencies {
+  let nextStatementId = 1;
+
+  const client = {
+    from(table: string) {
+      if (table === 'statements') {
+        return {
+          insert: (payload: Record<string, unknown> | Array<Record<string, unknown>>) => ({
+            select: () => ({
+              single: async () => {
+                const rows = Array.isArray(payload) ? payload : [payload];
+                const [row] = rows;
+                const data = { ...row, id: nextStatementId++ };
+                return { data, error: null };
+              },
+            }),
+          }),
+        };
+      }
+
+      if (table === 'transactions') {
+        return {
+          upsert: async (rows: Array<Record<string, unknown>>) => ({
+            error: null,
+            count: rows.length,
+          }),
+        };
+      }
+
+      throw new Error(`Mock Supabase does not support table: ${table}`);
+    },
+  };
+
+  return {
+    createSupabaseClient: () => client as unknown as SupabaseClient<unknown, unknown, unknown>,
+    parsePdf: async () => ({ text: '2024-01-01 Mock Transaction +100.00' }),
+    now: () => new Date(),
+  };
+}
+
+const defaultDependencies: StatementUploadDependencies =
+  process.env.MOCK_SUPABASE === '1'
+    ? createMockDependencies()
+    : {
+        createSupabaseClient: () => supabaseServerAdmin(),
+        parsePdf: buffer => pdf(buffer),
+        now: () => new Date(),
+      };
+
+type TransactionRow = {
+  statement_id: number;
+  trx_date: string;
+  description: string | null;
+  credit: number;
+  debit: number;
+  balance: number | null;
+  transaction_no: string | null;
+};
+
+const dateRe =
+  /^(?<d>\d{1,2})[\/\-](?<m>\d{1,2})[\/\-](?<y>\d{4})\b|^(?<y2>\d{4})-(?<m2>\d{2})-(?<d2>\d{2})\b/;
+const amtRe = /[-+]?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})|\d+(?:\.\d{1,2})/;
+
+function resolveStatementId(rawId: unknown): number | null {
+  if (typeof rawId === 'number' && Number.isFinite(rawId)) return rawId;
+  if (typeof rawId === 'string') {
+    const parsed = Number(rawId);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function getFileName(file: Blob & Partial<File>): string {
+  const name = typeof file.name === 'string' ? file.name.trim() : '';
+  return name.length > 0 ? name : 'statement.pdf';
+}
+
+export async function handleStatementPost(
+  request: Request,
+  dependencies: StatementUploadDependencies = defaultDependencies
+): Promise<Response> {
   try {
-    const form = await req.formData();
-    const file = form.get('file') as File | null;
+    const form = await request.formData();
+    const fileEntry = form.get('file');
     const accountName = String(form.get('accountName') ?? '').trim();
 
-    if (!file) {
+    if (!(fileEntry instanceof Blob)) {
       return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
     }
     if (!accountName) {
       return NextResponse.json({ error: 'accountName is required' }, { status: 400 });
     }
 
-    const buf = Buffer.from(await file.arrayBuffer());
-    const fileName = file.name || 'statement.pdf';
+    const fileBlob = fileEntry as Blob & Partial<File>;
+    const buf = Buffer.from(await fileBlob.arrayBuffer());
+    const fileName = getFileName(fileBlob);
 
-    const supa = supabaseServerAdmin();
-    const { data: stmtIns, error: stmtErr } = await supa
+    const supabase = dependencies.createSupabaseClient();
+    const createdAt = dependencies.now().toISOString();
+
+    const { data: stmtIns, error: stmtErr } = await supabase
       .from('statements')
       .insert({
         account_name: accountName,
         file_name: fileName,
-        created_at: new Date().toISOString(),
+        created_at: createdAt,
       })
       .select('id')
       .single();
 
-    if (stmtErr || !stmtIns) {
-      return NextResponse.json({ error: 'Failed to create statement', details: stmtErr }, { status: 500 });
+    const statementId = resolveStatementId(stmtIns?.id);
+    if (stmtErr || statementId === null) {
+      return NextResponse.json(
+        { error: 'Failed to create statement', details: stmtErr ?? { message: 'Missing statement id' } },
+        { status: 500 }
+      );
     }
-    const statementId = stmtIns.id as number;
 
-    // Parse PDF
-    const parsed = await pdf(buf);
-    const text = parsed.text || '';
+    const parsed = await dependencies.parsePdf(buf);
+    const text = parsed.text ?? '';
+    const lines = text
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(Boolean);
 
-    // Simple heuristic parser (adjust later to your bank format)
-    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-
-    const dateRe =
-      /^(?<d>\d{1,2})[\/\-](?<m>\d{1,2})[\/\-](?<y>\d{4})\b|^(?<y2>\d{4})-(?<m2>\d{2})-(?<d2>\d{2})\b/;
-    const amtRe = /[-+]?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})|\d+(?:\.\d{1,2})/;
-
-    type Row = {
-      statement_id: number;
-      trx_date: string;
-      description: string | null;
-      credit: number;
-      debit: number;
-      balance: number | null;
-      transaction_no: string | null;
-    };
-
-    const candidates: Row[] = [];
+    const candidates: TransactionRow[] = [];
 
     for (const line of lines) {
       const dMatch = line.match(dateRe);
       const aMatch = line.match(amtRe);
       if (!dMatch || !aMatch) continue;
 
-      let y: string, m: string, d: string;
-      if (dMatch.groups?.y2) {
-        y = dMatch.groups.y2;
-        m = dMatch.groups.m2;
-        d = dMatch.groups.d2;
-      } else {
-        const dd = dMatch.groups!;
-        y = dd.y;
-        m = dd.m.padStart(2, '0');
-        d = dd.d.padStart(2, '0');
-      }
-      const trx_date = `${y}-${m}-${d}`;
+      const groups = dMatch.groups ?? {};
+      const year = groups.y2 ?? groups.y;
+      const month = groups.m2 ?? groups.m;
+      const day = groups.d2 ?? groups.d;
+      if (!year || !month || !day) continue;
+
+      const trxDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
 
       const amtStr = aMatch[0];
       const raw = amtStr.replace(/,/g, '');
       const amt = Number(raw);
+      if (!Number.isFinite(amt)) continue;
+
       const credit = amt >= 0 ? amt : 0;
       const debit = amt < 0 ? Math.abs(amt) : 0;
 
@@ -90,11 +168,11 @@ export async function POST(req: NextRequest) {
       if (tail >= 0) {
         description = description.slice(0, tail).trim();
       }
-      const normalizedDescription = description === '' ? null : description;
+      const normalizedDescription = description.length > 0 ? description : null;
 
       candidates.push({
         statement_id: statementId,
-        trx_date,
+        trx_date: trxDate,
         description: normalizedDescription,
         credit,
         debit,
@@ -103,19 +181,18 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Insert (upsert on unique_key)
     const batchSize = 500;
     let inserted = 0;
+
     for (let i = 0; i < candidates.length; i += batchSize) {
       const slice = candidates.slice(i, i + batchSize);
       if (!slice.length) continue;
 
-      const { error: insErr, count } = await supa
+      const { error: insErr, count } = await supabase
         .from('transactions')
         .upsert(slice, { onConflict: 'unique_key', ignoreDuplicates: true, count: 'exact' });
 
       if (insErr) {
-        // Return partial success as JSON (still JSON!)
         return NextResponse.json(
           {
             statement_id: statementId,
@@ -127,6 +204,7 @@ export async function POST(req: NextRequest) {
           { status: 207 }
         );
       }
+
       inserted += count ?? 0;
     }
 
@@ -137,8 +215,9 @@ export async function POST(req: NextRequest) {
       ok: true,
     });
   } catch (error: unknown) {
-    // Always return JSON on error
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
+export const POST = async (request: Request) => handleStatementPost(request);
