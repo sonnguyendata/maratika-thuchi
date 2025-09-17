@@ -20,8 +20,8 @@ export default function ReportsPage() {
         const c = await fetch("/api/reports/by-category").then(r => r.json());
         if (c?.error) throw new Error(c.error);
         setRows(c);
-      } catch (e: any) {
-        setErr(e?.message ?? "Failed to load reports");
+      } catch (error: unknown) {
+        setErr(error instanceof Error ? error.message : "Failed to load reports");
       }
     })();
   }, []);

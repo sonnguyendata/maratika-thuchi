@@ -6,7 +6,7 @@ import { redirect } from 'next/navigation';
 export const dynamic = 'force-dynamic';
 
 export default async function AdminTransactionsPage() {
-  const supa = supabaseServer();
+  const supa = await supabaseServer();
 
   // Gate: must be signed in
   const { data: { user } } = await supa.auth.getUser();

@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 
 async function ensureAdmin() {
-  const supabase = supabaseServer();
+  const supabase = await supabaseServer();
   const { data: usr } = await supabase.auth.getUser();
   const { data: me } = await supabase
     .from("profiles")

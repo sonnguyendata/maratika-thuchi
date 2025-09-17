@@ -87,13 +87,15 @@ export async function POST(req: NextRequest) {
 
       let description = line.replace(dateRe, '').trim();
       const tail = description.lastIndexOf(amtStr);
-      if (tail >= 0) description = description.slice(0, tail).trim();
-      if (!description) description = null;
+      if (tail >= 0) {
+        description = description.slice(0, tail).trim();
+      }
+      const normalizedDescription = description === '' ? null : description;
 
       candidates.push({
         statement_id: statementId,
         trx_date,
-        description,
+        description: normalizedDescription,
         credit,
         debit,
         balance: null,
@@ -134,8 +136,9 @@ export async function POST(req: NextRequest) {
       inserted_rows: inserted,
       ok: true,
     });
-  } catch (e: any) {
+  } catch (error: unknown) {
     // Always return JSON on error
-    return NextResponse.json({ error: e?.message ?? 'Unknown error' }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

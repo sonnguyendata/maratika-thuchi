@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { supabaseServer } from '@/lib/supabaseServer';
 
 export default async function AdminPage() {
-  const supabase = supabaseServer();
+  const supabase = await supabaseServer();
 
   // Server-side auth check (relies on cookies set by /api/auth)
   const {
