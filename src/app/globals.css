@@ -1,26 +1,383 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --vajra-night: #080a15;
+  --vajra-indigo: #1f1a35;
+  --vajra-crimson: #b52345;
+  --vajra-saffron: #f9c846;
+  --vajra-turquoise: #35c6c0;
+  --vajra-ivory: #fbeedd;
+  --vajra-muted: rgba(251, 238, 221, 0.65);
+  --vajra-surface: rgba(21, 20, 32, 0.78);
+  --vajra-border: rgba(255, 255, 255, 0.12);
+  --vajra-shadow: 0 24px 60px rgba(6, 8, 22, 0.45);
+  --vajra-radius: 24px;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-background: var(--vajra-night);
+  --color-foreground: var(--vajra-ivory);
+  --font-sans: "Inter", "Noto Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: radial-gradient(circle at 20% 20%, rgba(181, 35, 69, 0.28), transparent 55%),
+    radial-gradient(circle at 80% 10%, rgba(53, 198, 192, 0.18), transparent 50%),
+    radial-gradient(circle at 50% 100%, rgba(249, 200, 70, 0.08), transparent 45%),
+    var(--vajra-night);
+  color: var(--vajra-ivory);
+  font-family: var(--font-sans);
+  min-height: 100vh;
+  margin: 0;
+  line-height: 1.55;
+  position: relative;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 15% 75%, rgba(249, 200, 70, 0.08), transparent 55%),
+    radial-gradient(circle at 85% 65%, rgba(53, 198, 192, 0.12), transparent 45%);
+  opacity: 0.9;
+  z-index: -1;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+  text-decoration-color: rgba(249, 200, 70, 0.6);
+  text-decoration-thickness: 2px;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+.vajra-body {
+  background-color: transparent;
+}
+
+.vajra-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: clamp(1.5rem, 4vw, 3.5rem) clamp(1rem, 4vw, 3.5rem);
+  gap: clamp(2rem, 4vw, 3.5rem);
+}
+
+.vajra-container {
+  width: min(1100px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(1.75rem, 3vw, 2.75rem);
+}
+
+.vajra-panel {
+  position: relative;
+  border-radius: var(--vajra-radius);
+  border: 1px solid var(--vajra-border);
+  background: linear-gradient(140deg, rgba(34, 28, 50, 0.95), var(--vajra-surface));
+  box-shadow: var(--vajra-shadow);
+  padding: clamp(1.5rem, 3.5vw, 3rem);
+  backdrop-filter: blur(28px);
+}
+
+.vajra-panel[data-tone='sunrise'] {
+  background: linear-gradient(145deg, rgba(181, 35, 69, 0.9), rgba(249, 200, 70, 0.75));
+  border-color: rgba(249, 200, 70, 0.45);
+  box-shadow: 0 24px 60px rgba(181, 35, 69, 0.35);
+}
+
+.vajra-panel[data-tone='horizon'] {
+  background: linear-gradient(145deg, rgba(32, 38, 66, 0.9), rgba(53, 198, 192, 0.4));
+  border-color: rgba(53, 198, 192, 0.32);
+}
+
+.vajra-heading {
+  font-size: clamp(2rem, 5vw, 2.75rem);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.vajra-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--vajra-muted);
+}
+
+.vajra-subtext {
+  color: rgba(251, 238, 221, 0.78);
+  font-size: clamp(0.95rem, 2vw, 1.05rem);
+  max-width: 62ch;
+}
+
+.vajra-card-grid {
+  display: grid;
+  gap: clamp(1.1rem, 2.5vw, 1.75rem);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.vajra-card {
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(18, 20, 33, 0.85);
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  color: inherit;
+  transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
+  position: relative;
+}
+
+.vajra-card:hover {
+  transform: translateY(-6px);
+  border-color: rgba(249, 200, 70, 0.38);
+  box-shadow: 0 22px 40px rgba(10, 12, 25, 0.55);
+  text-decoration: none;
+}
+
+.vajra-card__icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(249, 200, 70, 0.65), rgba(53, 198, 192, 0.55));
+  color: #0a0e19;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 1.1rem;
+  box-shadow: 0 12px 20px rgba(0, 0, 0, 0.25);
+}
+
+.vajra-card__title {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.vajra-card__desc {
+  color: rgba(251, 238, 221, 0.72);
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+.vajra-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 999px;
+  border: none;
+  padding: 0.65rem 1.65rem;
+  font-weight: 600;
+  color: #0b0f19;
+  background: linear-gradient(135deg, #f9c846, #ff835c);
+  box-shadow: 0 14px 32px rgba(249, 200, 70, 0.45);
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.2s ease;
+  text-decoration: none;
+}
+
+.vajra-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 20px 38px rgba(249, 200, 70, 0.5);
+}
+
+.vajra-button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.vajra-button--ghost {
+  background: transparent;
+  color: rgba(251, 238, 221, 0.86);
+  border: 1px solid rgba(249, 200, 70, 0.45);
+  box-shadow: none;
+}
+
+.vajra-button--ghost:hover {
+  background: rgba(249, 200, 70, 0.14);
+  box-shadow: none;
+}
+
+.vajra-button[data-size='sm'] {
+  padding: 0.45rem 1rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.vajra-field {
+  width: 100%;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(11, 14, 25, 0.7);
+  padding: 0.75rem 1rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  color: inherit;
+}
+
+.vajra-field:focus {
+  outline: none;
+  border-color: rgba(249, 200, 70, 0.7);
+  box-shadow: 0 0 0 3px rgba(249, 200, 70, 0.25);
+  background: rgba(11, 14, 25, 0.85);
+}
+
+.vajra-field--compact {
+  border-radius: 12px;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.88rem;
+}
+
+.vajra-field::placeholder {
+  color: rgba(251, 238, 221, 0.45);
+}
+
+select.vajra-field {
+  background-image: linear-gradient(45deg, transparent 50%, rgba(249, 200, 70, 0.7) 50%),
+    linear-gradient(135deg, rgba(249, 200, 70, 0.7) 50%, transparent 50%);
+  background-position: calc(100% - 20px) calc(50% - 5px), calc(100% - 15px) calc(50% - 5px);
+  background-size: 8px 8px, 8px 8px;
+  background-repeat: no-repeat;
+  padding-right: 2.5rem;
+  appearance: none;
+}
+
+.vajra-table-wrapper {
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  background: rgba(11, 14, 25, 0.68);
+  box-shadow: 0 16px 32px rgba(5, 6, 18, 0.45);
+}
+
+.vajra-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 100%;
+  font-size: 0.92rem;
+}
+
+.vajra-table thead {
+  background: rgba(249, 200, 70, 0.08);
+  color: rgba(251, 238, 221, 0.82);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+}
+
+.vajra-table th,
+.vajra-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.vajra-table tbody tr:hover {
+  background: rgba(249, 200, 70, 0.05);
+}
+
+.vajra-toast {
+  border-radius: 18px;
+  border: 1px solid rgba(214, 83, 111, 0.4);
+  background: rgba(214, 83, 111, 0.18);
+  color: #ffd9d6;
+  padding: 0.9rem 1.2rem;
+}
+
+.vajra-highlight {
+  color: var(--vajra-saffron);
+  font-weight: 600;
+}
+
+.vajra-pre {
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(11, 14, 25, 0.78);
+  padding: 1rem;
+  max-height: 360px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: rgba(251, 238, 221, 0.88);
+}
+
+.vajra-hint {
+  color: rgba(251, 238, 221, 0.62);
+  font-size: 0.85rem;
+}
+
+.vajra-stat-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.vajra-stat {
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(12, 16, 27, 0.7);
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.vajra-stat__label {
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(251, 238, 221, 0.6);
+}
+
+.vajra-stat__value {
+  font-size: 1.45rem;
+  font-weight: 600;
+}
+
+.vajra-ornament {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  border: 1px solid rgba(249, 200, 70, 0.18);
+  opacity: 0.4;
+  transform: rotate(2deg);
+}
+
+.vajra-panel[data-tone='sunrise'] .vajra-kicker {
+  color: rgba(255, 246, 230, 0.72);
+}
+
+@media (max-width: 600px) {
+  .vajra-shell {
+    padding-top: 1.5rem;
+    padding-bottom: 1.5rem;
+  }
+
+  .vajra-panel {
+    padding: 1.5rem;
+  }
 }

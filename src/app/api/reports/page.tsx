@@ -20,59 +20,81 @@ export default function ReportsPage() {
         const c = await fetch("/api/reports/by-category").then(r => r.json());
         if (c?.error) throw new Error(c.error);
         setRows(c);
-      } catch (e: any) {
-        setErr(e?.message ?? "Failed to load reports");
+      } catch (error: unknown) {
+        setErr(error instanceof Error ? error.message : "Failed to load reports");
       }
     })();
   }, []);
 
   return (
-    <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-semibold">Reports</h1>
+    <main className="vajra-shell">
+      <div className="vajra-container">
+        <section className="vajra-panel" data-tone="sunrise">
+          <div className="vajra-ornament" aria-hidden />
+          <div className="space-y-4">
+            <span className="vajra-kicker">Insight reports</span>
+            <h1 className="vajra-heading text-[clamp(1.9rem,4vw,2.4rem)]">Monthly balance overview</h1>
+            <p className="vajra-subtext">
+              Understand the flow of dana and operations at a glance. Summary tiles show totals,
+              while the table below reveals how each category contributes toward intentions.
+            </p>
+            {err && (
+              <div className="vajra-toast" role="alert">
+                {err}
+              </div>
+            )}
+          </div>
+        </section>
 
-      {err && <div className="p-3 border rounded text-red-600">{err}</div>}
+        <section className="vajra-panel">
+          <div className="space-y-6">
+            <div className="vajra-stat-grid">
+              <div className="vajra-stat">
+                <span className="vajra-stat__label">Total in</span>
+                <span className="vajra-stat__value">{summary?.total_in?.toLocaleString() ?? '—'}</span>
+                <span className="vajra-hint">Includes all income categories.</span>
+              </div>
+              <div className="vajra-stat">
+                <span className="vajra-stat__label">Total out</span>
+                <span className="vajra-stat__value">{summary?.total_out?.toLocaleString() ?? '—'}</span>
+                <span className="vajra-hint">Covers expenses and operational spend.</span>
+              </div>
+              <div className="vajra-stat">
+                <span className="vajra-stat__label">Net balance</span>
+                <span className="vajra-stat__value">{summary?.net?.toLocaleString() ?? '—'}</span>
+                <span className="vajra-hint">Positive numbers indicate surplus.</span>
+              </div>
+            </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="p-4 border rounded">
-          <div className="text-sm text-gray-500">Total In</div>
-          <div className="text-xl font-bold">{summary?.total_in?.toLocaleString() ?? "-"}</div>
-        </div>
-        <div className="p-4 border rounded">
-          <div className="text-sm text-gray-500">Total Out</div>
-          <div className="text-xl font-bold">{summary?.total_out?.toLocaleString() ?? "-"}</div>
-        </div>
-        <div className="p-4 border rounded">
-          <div className="text-sm text-gray-500">Net</div>
-          <div className="text-xl font-bold">{summary?.net?.toLocaleString() ?? "-"}</div>
-        </div>
+            <div className="vajra-table-wrapper overflow-x-auto">
+              <table className="vajra-table">
+                <thead>
+                  <tr>
+                    <th className="text-left">Type</th>
+                    <th className="text-left">Category</th>
+                    <th className="text-right">Total in</th>
+                    <th className="text-right">Total out</th>
+                    <th className="text-right">Net</th>
+                    <th className="text-right">Target</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r, i) => (
+                    <tr key={i}>
+                      <td>{r.type ?? '-'}</td>
+                      <td>{r.category ?? '(uncategorised)'}</td>
+                      <td className="text-right">{(r.total_in ?? 0).toLocaleString()}</td>
+                      <td className="text-right">{(r.total_out ?? 0).toLocaleString()}</td>
+                      <td className="text-right">{(r.net ?? 0).toLocaleString()}</td>
+                      <td className="text-right">{(r.target_amount ?? 0).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
       </div>
-
-      <div className="border rounded overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="text-left p-2">Type</th>
-              <th className="text-left p-2">Category</th>
-              <th className="text-right p-2">Total In</th>
-              <th className="text-right p-2">Total Out</th>
-              <th className="text-right p-2">Net</th>
-              <th className="text-right p-2">Target</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={i} className="border-t">
-                <td className="p-2">{r.type ?? "-"}</td>
-                <td className="p-2">{r.category ?? "(uncategorized)"}</td>
-                <td className="p-2 text-right">{(r.total_in ?? 0).toLocaleString()}</td>
-                <td className="p-2 text-right">{(r.total_out ?? 0).toLocaleString()}</td>
-                <td className="p-2 text-right">{(r.net ?? 0).toLocaleString()}</td>
-                <td className="p-2 text-right">{(r.target_amount ?? 0).toLocaleString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    </main>
   );
 }

@@ -1,103 +1,79 @@
-import Image from "next/image";
+import Link from "next/link";
+
+const features = [
+  {
+    title: "Statement alchemy",
+    description:
+      "Transform uploaded PDFs into structured transactions with clarity and ease. The Vajra parser respects your regional formats and avoids duplicates by default.",
+    href: "/admin/upload",
+    icon: "☸️",
+  },
+  {
+    title: "Mindful categorisation",
+    description:
+      "Shape categories for dana, operations, and community projects. Inline editing and targets help keep monthly intentions visible.",
+    href: "/admin/categories",
+    icon: "🪷",
+  },
+  {
+    title: "Insight reports",
+    description:
+      "Observe the flow of merit with net balances, income/outgoing insights, and gentle variance cues against your aspirations.",
+    href: "/api/reports",
+    icon: "🔱",
+  },
+];
 
 export default function Home() {
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <main className="vajra-shell">
+      <div className="vajra-container">
+        <section className="vajra-panel" data-tone="sunrise">
+          <div className="vajra-ornament" aria-hidden />
+          <span className="vajra-kicker">Maratika Treasury</span>
+          <h1 className="vajra-heading mt-4">Finance flows guided by Vajrayana clarity</h1>
+          <p className="vajra-subtext mt-4">
+            A focused workspace for lineage treasurers to ingest statements, care for
+            categories, and illuminate reports. Built to feel ceremonial yet
+            contemporary, with gentle gradients inspired by Himalayan dawn.
+          </p>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <Link href="/login" className="vajra-button">
+              Admin sign in
+            </Link>
+            <Link href="/dashboard" className="vajra-button vajra-button--ghost">
+              View dashboard
+            </Link>
+          </div>
+        </section>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+        <section className="vajra-panel">
+          <div className="flex flex-col gap-8">
+            <div>
+              <p className="vajra-kicker">What’s inside</p>
+              <h2 className="vajra-heading mt-4 text-[clamp(1.8rem,4vw,2.25rem)]">
+                A simplified ritual for community finance
+              </h2>
+              <p className="vajra-subtext mt-3">
+                Everything you need to steward statements, transactions, and
+                monthly insights lives in one place—no spreadsheets required.
+              </p>
+            </div>
+
+            <div className="vajra-card-grid">
+              {features.map(feature => (
+                <Link key={feature.title} href={feature.href} className="vajra-card">
+                  <span className="vajra-card__icon" aria-hidden>
+                    {feature.icon}
+                  </span>
+                  <span className="vajra-card__title">{feature.title}</span>
+                  <span className="vajra-card__desc">{feature.description}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
   );
 }

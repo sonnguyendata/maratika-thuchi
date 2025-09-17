@@ -64,51 +64,70 @@ export default function LoginPage() {
         navigating.current = true;
         router.replace('/admin');
       }
-    } catch (err: any) {
-      setError(err?.message ?? 'Login failed');
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : 'Login failed');
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow">
-        <h1 className="text-xl font-semibold mb-4">Sign in</h1>
-        <form onSubmit={onSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm mb-1">Email</label>
-            <input
-              type="email"
-              className="w-full rounded-md border px-3 py-2"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="email"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm mb-1">Password</label>
-            <input
-              type="password"
-              className="w-full rounded-md border px-3 py-2"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-              required
-            />
-          </div>
+    <main className="vajra-shell">
+      <div className="vajra-container">
+        <section className="vajra-panel max-w-md mx-auto" data-tone="sunrise">
+          <div className="vajra-ornament" aria-hidden />
+          <div className="space-y-6">
+            <div className="space-y-3">
+              <span className="vajra-kicker">Admin access</span>
+              <h1 className="vajra-heading text-[clamp(1.8rem,5vw,2.3rem)]">Enter the treasury</h1>
+              <p className="vajra-subtext">
+                Sign in with your Supabase credentials to continue. Sessions sync back to the
+                server so the Vajra workspace can greet you instantly.
+              </p>
+            </div>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+            <form onSubmit={onSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-[rgba(255,246,230,0.75)] mb-2">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  className="vajra-field"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                  required
+                  placeholder="you@example.org"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-[rgba(255,246,230,0.75)] mb-2">
+                  Password
+                </label>
+                <input
+                  type="password"
+                  className="vajra-field"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  required
+                  placeholder="••••••••"
+                />
+              </div>
 
-          <button
-            type="submit"
-            disabled={busy}
-            className="w-full rounded-md bg-black text-white py-2 disabled:opacity-60"
-          >
-            {busy ? 'Signing in…' : 'Sign in'}
-          </button>
-        </form>
+              {error && (
+                <p className="vajra-toast" role="alert">
+                  {error}
+                </p>
+              )}
+
+              <button type="submit" disabled={busy} className="vajra-button w-full justify-center">
+                {busy ? 'Signing in…' : 'Sign in'}
+              </button>
+            </form>
+          </div>
+        </section>
       </div>
     </main>
   );
