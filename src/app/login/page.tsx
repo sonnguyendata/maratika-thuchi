@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, Session } from '@supabase/supabase-js';
 
 function getEnv() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -21,25 +21,35 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // If already signed in on the client, bounce to /admin
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) {
-        router.replace('/admin');
-        router.refresh();
-      }
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // prevent multiple redirects
+  const navigating = useRef(false);
 
-  async function syncCookie(event: 'SIGNED_IN' | 'SIGNED_OUT' | 'TOKEN_REFRESHED', session: any) {
-    // Tell our server route to persist/clear the auth cookie
+  async function syncCookie(event: 'SIGNED_IN' | 'SIGNED_OUT' | 'TOKEN_REFRESHED', session?: Session | null) {
     await fetch('/api/auth', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ event, session }),
+      body: JSON.stringify({
+        event,
+        session: session
+          ? { access_token: session.access_token, refresh_token: session.refresh_token }
+          : null,
+      }),
     });
   }
+
+  // If already signed in on the client: sync cookie first, then go to /admin
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      if (data.session && !navigating.current) {
+        navigating.current = true;
+        await syncCookie('SIGNED_IN', data.session); // <-- important
+        router.replace('/admin');
+        // No router.refresh() here; /admin is a new page.
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -49,12 +59,11 @@ export default function LoginPage() {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
 
-      // persist cookie for server components (/admin)
       await syncCookie('SIGNED_IN', data.session);
-
-      // go to Admin
-      router.replace('/admin');
-      router.refresh();
+      if (!navigating.current) {
+        navigating.current = true;
+        router.replace('/admin');
+      }
     } catch (err: any) {
       setError(err?.message ?? 'Login failed');
     } finally {
