@@ -10,7 +10,7 @@ import { supabaseServerAdmin } from '@/lib/supabaseServer';
 type ParsePdfFn = (buffer: Buffer) => Promise<{ text?: string }>; // compatible with pdf-parse result
 
 export type StatementUploadDependencies = {
-  createSupabaseClient: () => SupabaseClient<unknown, unknown, unknown>;
+  createSupabaseClient: () => SupabaseClient;
   parsePdf: ParsePdfFn;
   now: () => Date;
 };
@@ -49,7 +49,7 @@ function createMockDependencies(): StatementUploadDependencies {
   };
 
   return {
-    createSupabaseClient: () => client as unknown as SupabaseClient<unknown, unknown, unknown>,
+    createSupabaseClient: () => client as unknown as SupabaseClient,
     parsePdf: async () => ({ text: '2024-01-01 Mock Transaction +100.00' }),
     now: () => new Date(),
   };
