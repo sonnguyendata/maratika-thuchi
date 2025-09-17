@@ -4,14 +4,14 @@ export const dynamic = 'force-dynamic';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
-import pdf from 'pdf-parse';
+import { getPdfParse } from '@/lib/pdfParse';
 import { supabaseServerAdmin } from '@/lib/supabaseServer';
 
 type ParsePdfFn = (buffer: Buffer) => Promise<{ text?: string }>; // compatible with pdf-parse result
 
 export type StatementUploadDependencies = {
   createSupabaseClient: () => SupabaseClient;
-  parsePdf: ParsePdfFn;
+  parsePdf?: ParsePdfFn;
   now: () => Date;
 };
 
@@ -60,7 +60,6 @@ const defaultDependencies: StatementUploadDependencies =
     ? createMockDependencies()
     : {
         createSupabaseClient: () => supabaseServerAdmin(),
-        parsePdf: buffer => pdf(buffer),
         now: () => new Date(),
       };
 
@@ -133,7 +132,8 @@ export async function handleStatementPost(
       );
     }
 
-    const parsed = await dependencies.parsePdf(buf);
+    const parsePdf = dependencies.parsePdf ?? ((await getPdfParse()) as ParsePdfFn);
+    const parsed = await parsePdf(buf);
     const text = parsed.text ?? '';
     const lines = text
       .split(/\r?\n/)
