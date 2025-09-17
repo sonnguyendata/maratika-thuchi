@@ -3,10 +3,15 @@
 
 import { useState } from 'react';
 
+type ErrorPayload = { error: string };
+
+const isErrorPayload = (value: unknown): value is ErrorPayload =>
+  typeof value === 'object' && value !== null && 'error' in value && typeof (value as { error: unknown }).error === 'string';
+
 export default function UploadPage() {
   const [accountName, setAccountName] = useState("Cherry's Techcombank");
   const [file, setFile] = useState<File | null>(null);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<unknown | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -33,7 +38,7 @@ export default function UploadPage() {
 
       // Defensive parse: prefer JSON, else text
       const ct = res.headers.get('content-type') || '';
-      let payload: any = null;
+      let payload: unknown;
       if (ct.includes('application/json')) {
         try {
           payload = await res.json();
@@ -48,12 +53,12 @@ export default function UploadPage() {
       }
 
       if (!res.ok) {
-        setError(payload?.error || `Upload failed (HTTP ${res.status})`);
+        setError(isErrorPayload(payload) ? payload.error : `Upload failed (HTTP ${res.status})`);
       } else {
         setResult(payload);
       }
-    } catch (err: any) {
-      setError(err?.message ?? 'Unexpected error');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Unexpected error');
     } finally {
       setBusy(false);
     }
@@ -97,7 +102,7 @@ export default function UploadPage() {
         </div>
       )}
 
-      {result && (
+      {result !== null && (
         <pre className="mt-3 p-3 bg-gray-50 border rounded text-sm overflow-auto">
 {JSON.stringify(result, null, 2)}
         </pre>

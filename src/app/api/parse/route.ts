@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pdf from 'pdf-parse';
 import { sha256 } from 'js-sha256';
+import { supabaseServerAdmin } from '@/lib/supabaseServer';
 
 
 export async function POST(req: NextRequest) {

@@ -64,8 +64,8 @@ export default function LoginPage() {
         navigating.current = true;
         router.replace('/admin');
       }
-    } catch (err: any) {
-      setError(err?.message ?? 'Login failed');
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : 'Login failed');
     } finally {
       setBusy(false);
     }

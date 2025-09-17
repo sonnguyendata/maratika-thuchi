@@ -6,9 +6,9 @@ export const dynamic = 'force-dynamic';
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
-  const { id } = params;
+  const { id } = await context.params;
   const supa = supabaseServerAdmin();
   const body = await req.json().catch(() => ({}));
   const { role, password } = body as { role?: string; password?: string };
@@ -32,9 +32,9 @@ export async function PATCH(
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
-  const { id } = params;
+  const { id } = await context.params;
   const supa = supabaseServerAdmin();
 
   const { error } = await supa.auth.admin.deleteUser(id);

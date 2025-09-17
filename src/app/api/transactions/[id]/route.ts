@@ -2,14 +2,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 
-export async function PATCH(_req: NextRequest, { params }: { params: { id: string } }) {
-  const id = Number(params.id);
+export async function PATCH(
+  _req: NextRequest,
+  context: { params: Promise<{ id: string }> },
+) {
+  const { id: idParam } = await context.params;
+  const id = Number(idParam);
   if (!id) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
 
   const body = await _req.json().catch(() => ({}));
   const { category_id, hidden } = body ?? {};
 
-  const supabase = supabaseServer();
+  const supabase = await supabaseServer();
 
   // Optional: verify current user is admin via profiles
   const { data: me } = await supabase.from("profiles").select("role").eq("user_id", (await supabase.auth.getUser()).data.user?.id).single();
@@ -24,9 +28,13 @@ export async function PATCH(_req: NextRequest, { params }: { params: { id: strin
   return NextResponse.json({ ok: true });
 }
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
-  const id = Number(params.id);
-  const supabase = supabaseServer();
+export async function GET(
+  _req: NextRequest,
+  context: { params: Promise<{ id: string }> },
+) {
+  const { id: idParam } = await context.params;
+  const id = Number(idParam);
+  const supabase = await supabaseServer();
   const { data, error } = await supabase.from("transactions").select("*").eq("id", id).single();
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   return NextResponse.json(data);
