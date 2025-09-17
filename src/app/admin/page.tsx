@@ -1,99 +1,60 @@
-// src/app/admin/page.tsx
+// Server component: protects the /admin page
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { supabaseServer } from '@/lib/supabaseServer';
 
-export const dynamic = 'force-dynamic'; // ensure cookies/session are read fresh
-
 export default async function AdminPage() {
   const supabase = supabaseServer();
 
-  // 1) Check session (server-side)
+  // Server-side auth check (relies on cookies set by /api/auth)
   const {
-    data: { session },
-    error: sessionError,
-  } = await supabase.auth.getSession();
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
 
-  if (sessionError) {
-    // If something went wrong reading the session, treat like unauthenticated
+  if (error || !user) {
     redirect('/login');
   }
 
-  if (!session) {
-    redirect('/login');
-  }
-
-  // 2) Check role from profiles
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('role, full_name')
-    .eq('user_id', session.user.id)
-    .maybeSingle();
-
-  // If no profile row yet, or any error, block access
-  if (profileError || !profile || profile.role !== 'admin') {
-    redirect('/'); // or redirect('/login') — your choice
+  // Optional: restrict to admin email via env
+  const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+  if (adminEmail && user.email !== adminEmail) {
+    redirect('/'); // not an admin
   }
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-10">
-      <h1 className="text-2xl font-semibold">
-        Admin Dashboard{profile?.full_name ? ` — ${profile.full_name}` : ''}
-      </h1>
-      <p className="mt-2 text-sm text-gray-500">
-        You are signed in as <span className="font-medium">{session.user.email}</span>.
-      </p>
+    <main className="min-h-screen bg-gray-50 p-6">
+      <div className="mx-auto max-w-4xl">
+        <header className="mb-6 flex items-center justify-between">
+          <h1 className="text-2xl font-semibold">Admin dashboard</h1>
+          <form action="/api/auth/signout" method="post">
+            <button className="rounded-md bg-black px-3 py-2 text-white">Sign out</button>
+          </form>
+        </header>
 
-      <section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <AdminCard
-          title="Upload Statement"
-          desc="Import a bank PDF and parse to transactions."
-          href="/upload"
-        />
-        <AdminCard
-          title="Transactions"
-          desc="Review, hide, and categorize transactions."
-          href="/admin/transactions"
-        />
-        <AdminCard
-          title="Categories"
-          desc="Create and manage categories & targets."
-          href="/admin/categories"
-        />
-        <AdminCard
-          title="Reports"
-          desc="Totals in/out, by category, and details."
-          href="/reports"
-        />
-        <AdminCard
-          title="Users"
-          desc="Create, edit, or delete application users."
-          href="/admin/users"
-        />
-      </section>
+        <section className="grid gap-4 sm:grid-cols-2">
+          <Card href="/upload" title="Upload statement" desc="Parse a bank statement PDF and store transactions." />
+          <Card href="/admin/categories" title="Manage categories" desc="Create, edit or delete categories." />
+          <Card href="/admin/users" title="Manage users" desc="Create, edit or delete app users." />
+          <Card href="/reports" title="Reports" desc="View monthly summaries and category breakdowns." />
+          <Card href="/transactions" title="Transactions" desc="Search, view, and categorize transactions." />
+        </section>
+      </div>
     </main>
   );
 }
 
-function AdminCard({
-  title,
-  desc,
-  href,
-}: {
-  title: string;
-  desc: string;
-  href: string;
-}) {
+function Card({ href, title, desc }: { href: string; title: string; desc: string }) {
   return (
     <Link
       href={href}
-      className="rounded-2xl border border-gray-200 p-5 shadow-sm transition hover:shadow-md"
+      className="block rounded-xl border bg-white p-5 shadow-sm transition hover:shadow-md"
     >
-      <h2 className="text-lg font-medium">{title}</h2>
-      <p className="mt-1 text-sm text-gray-600">{desc}</p>
-      <span className="mt-3 inline-block text-sm font-medium text-blue-600">
-        Open →
-      </span>
+      <h2 className="mb-1 text-lg font-medium">{title}</h2>
+      <p className="text-sm text-gray-600">{desc}</p>
     </Link>
   );
 }

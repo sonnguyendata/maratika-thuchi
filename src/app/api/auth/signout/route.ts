@@ -2,8 +2,7 @@ import { NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
-export async function POST(req: Request) {
-  const body = await req.json().catch(() => ({}));
+export async function POST() {
   const cookieStore = cookies();
 
   const supabase = createServerClient(
@@ -18,19 +17,6 @@ export async function POST(req: Request) {
     }
   );
 
-  const { event, session } = body ?? {};
-
-  if (event === 'SIGNED_IN' && session?.access_token) {
-    // Set the auth cookie on the server
-    await supabase.auth.setSession({
-      access_token: session.access_token,
-      refresh_token: session.refresh_token,
-    });
-  }
-
-  if (event === 'SIGNED_OUT') {
-    await supabase.auth.signOut();
-  }
-
-  return NextResponse.json({ ok: true });
+  await supabase.auth.signOut();
+  return NextResponse.redirect(new URL('/login', process.env.NEXT_PUBLIC_SITE_URL || 'https://maratika-thuchi.vercel.app'));
 }
