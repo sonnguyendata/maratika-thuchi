@@ -1,5 +1,5 @@
 // src/app/api/admin/setup-profile/route.ts
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 
 export async function POST() {
