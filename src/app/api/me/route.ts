@@ -6,15 +6,17 @@ export async function GET() {
   const supabase = await supabaseServer();
   const { data: userRes, error: userErr } = await supabase.auth.getUser();
   if (userErr || !userRes?.user) {
-    return NextResponse.json({ user: null, isAdmin: false });
+    return NextResponse.json({ user: null, role: null });
   }
 
-  // Check admin email from environment variable
-  const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
-  const isAdmin = !adminEmail || userRes.user.email === adminEmail;
+  const { data: prof } = await supabase
+    .from("profiles")
+    .select("role,email")
+    .eq("user_id", userRes.user.id)
+    .single();
 
   return NextResponse.json({
     user: { id: userRes.user.id, email: userRes.user.email },
-    isAdmin,
+    role: prof?.role ?? null,
   });
 }
