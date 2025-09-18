@@ -9,15 +9,15 @@ export async function ensureAdmin() {
     return null;
   }
 
-  // Check admin email from environment variable
-  const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
-  if (adminEmail && user.email !== adminEmail) {
-    return null;
-  }
+  // Check if user has admin role in profiles table
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('user_id', user.id)
+    .single();
 
-  // If no admin email is set, allow any authenticated user (for development)
-  if (!adminEmail) {
-    return supabase;
+  if (!profile || profile.role !== 'admin') {
+    return null;
   }
 
   return supabase;
