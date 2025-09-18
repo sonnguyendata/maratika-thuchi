@@ -78,6 +78,10 @@ const dateRe =
   /^(?<d>\d{1,2})[\/\-](?<m>\d{1,2})[\/\-](?<y>\d{4})\b|^(?<y2>\d{4})-(?<m2>\d{2})-(?<d2>\d{2})\b|(?<d3>\d{1,2})\/(?<m3>\d{1,2})\/(?<y3>\d{4})/;
 // Enhanced amount regex to handle Vietnamese format with commas and various decimal places
 const amtRe = /([+-]?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)/;
+// Transaction number patterns for Vietnamese banks
+const txnNoRe = /(?:Txn|Transaction|Ref|Reference|No|Number|Mã|GD)[\s:]*([A-Z0-9\-]+)/i;
+// Balance patterns
+const balanceRe = /(?:Balance|Số dư|Dư|Còn lại)[\s:]*([+-]?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)/i;
 
 function resolveStatementId(rawId: unknown): number | null {
   if (typeof rawId === 'number' && Number.isFinite(rawId)) return rawId;
@@ -185,15 +189,49 @@ export async function handleStatementPost(
       const credit = amt >= 0 ? amt : 0;
       const debit = amt < 0 ? Math.abs(amt) : 0;
 
-      // Extract description by removing date and amount from the line
+      // Extract transaction number
+      const txnMatch = line.match(txnNoRe);
+      const transactionNo = txnMatch ? txnMatch[1] : null;
+
+      // Extract balance
+      const balanceMatch = line.match(balanceRe);
+      let balance = null;
+      if (balanceMatch) {
+        const balanceRaw = balanceMatch[1].replace(/,/g, '').replace(/[^\d.-]/g, '');
+        const balanceAmt = Number(balanceRaw);
+        if (Number.isFinite(balanceAmt)) {
+          balance = balanceAmt;
+        }
+      }
+
+      // Extract description by removing date, amount, transaction number, and balance from the line
       let description = line.replace(dateRe, '').trim();
+      
       // Remove the amount string from the description
       const tail = description.lastIndexOf(amtStr);
       if (tail >= 0) {
         description = description.slice(0, tail).trim();
       }
+      
+      // Remove transaction number if found
+      if (txnMatch) {
+        description = description.replace(txnMatch[0], '').trim();
+      }
+      
+      // Remove balance if found
+      if (balanceMatch) {
+        description = description.replace(balanceMatch[0], '').trim();
+      }
+      
       // Clean up Vietnamese text and remove extra spaces
       description = description.replace(/\s+/g, ' ').trim();
+      
+      // Additional cleanup for Vietnamese bank statements
+      description = description
+        .replace(/^(CHUYỂN|RÚT|THANH TOÁN|NHẬN|GỬI|MUA|BÁN)/, '') // Remove common prefixes
+        .replace(/\s+/g, ' ')
+        .trim();
+      
       const normalizedDescription = description.length > 0 ? description : null;
 
       candidates.push({
@@ -202,8 +240,8 @@ export async function handleStatementPost(
         description: normalizedDescription,
         credit,
         debit,
-        balance: null,
-        transaction_no: null,
+        balance,
+        transaction_no: transactionNo,
       });
     }
 
@@ -214,24 +252,84 @@ export async function handleStatementPost(
       const slice = candidates.slice(i, i + batchSize);
       if (!slice.length) continue;
 
-      const { error: insErr, count } = await supabase
-        .from('transactions')
-        .upsert(slice, { onConflict: 'unique_key', ignoreDuplicates: true, count: 'exact' });
-
-      if (insErr) {
-        return NextResponse.json(
-          {
-            statement_id: statementId,
-            parsed_rows: candidates.length,
-            inserted_rows: inserted,
-            error: 'Insert error',
-            details: insErr,
-          },
-          { status: 207 }
-        );
+      // For duplicate detection, we'll use a combination of statement_id, trx_date, amount, and transaction_no
+      // First, check for existing transactions with the same transaction_no
+      const transactionsToInsert = [];
+      const transactionsToUpdate = [];
+      
+      for (const candidate of slice) {
+        if (candidate.transaction_no) {
+          // Check if transaction with this transaction_no already exists
+          const { data: existing } = await supabase
+            .from('transactions')
+            .select('id, statement_id, trx_date, credit, debit, description')
+            .eq('transaction_no', candidate.transaction_no)
+            .single();
+          
+          if (existing) {
+            // Update existing transaction if it's from a different statement or has different details
+            if (existing.statement_id !== candidate.statement_id || 
+                existing.trx_date !== candidate.trx_date ||
+                existing.credit !== candidate.credit ||
+                existing.debit !== candidate.debit ||
+                existing.description !== candidate.description) {
+              transactionsToUpdate.push({ ...candidate, id: existing.id });
+            }
+            // Skip if it's identical
+          } else {
+            transactionsToInsert.push(candidate);
+          }
+        } else {
+          // For transactions without transaction_no, use the old method
+          transactionsToInsert.push(candidate);
+        }
       }
-
-      inserted += count ?? 0;
+      
+      let insertedCount = 0;
+      
+      // Insert new transactions
+      if (transactionsToInsert.length > 0) {
+        const { error: insErr, count } = await supabase
+          .from('transactions')
+          .upsert(transactionsToInsert, { onConflict: 'unique_key', ignoreDuplicates: true, count: 'exact' });
+        
+        if (insErr) {
+          return NextResponse.json(
+            {
+              statement_id: statementId,
+              parsed_rows: candidates.length,
+              inserted_rows: inserted,
+              error: 'Insert error',
+              details: insErr,
+            },
+            { status: 207 }
+          );
+        }
+        insertedCount += count ?? 0;
+      }
+      
+      // Update existing transactions
+      for (const updateTx of transactionsToUpdate) {
+        const { error: updateErr } = await supabase
+          .from('transactions')
+          .update({
+            statement_id: updateTx.statement_id,
+            trx_date: updateTx.trx_date,
+            description: updateTx.description,
+            credit: updateTx.credit,
+            debit: updateTx.debit,
+            balance: updateTx.balance
+          })
+          .eq('id', updateTx.id);
+        
+        if (updateErr) {
+          console.log('Update error for transaction:', updateTx.id, updateErr);
+        } else {
+          insertedCount++;
+        }
+      }
+      
+      inserted += insertedCount;
     }
 
     return NextResponse.json({
