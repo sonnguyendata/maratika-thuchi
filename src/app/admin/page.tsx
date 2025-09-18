@@ -20,9 +20,14 @@ export default async function AdminPage() {
     redirect('/login');
   }
 
-  // Optional: restrict to admin email via env
-  const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
-  if (adminEmail && user.email !== adminEmail) {
+  // Check if user has admin role in profiles table
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('user_id', user.id)
+    .single();
+
+  if (!profile || profile.role !== 'admin') {
     redirect('/'); // not an admin
   }
 
