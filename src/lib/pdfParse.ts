@@ -12,13 +12,17 @@ export async function getPdfParse(): Promise<PdfParseFn> {
     loadingParserPromise = (async () => {
       try {
         const pdfModule = await import('pdf-parse/lib/pdf-parse.js');
-        const parser = pdfModule?.default ?? pdfModule;
+        const parser = pdfModule.default || pdfModule;
 
         if (typeof parser !== 'function') {
           throw new Error('`pdf-parse` default export is not a function');
         }
 
-        cachedParser = parser as PdfParseFn;
+        // Wrap the parser to match our simplified interface
+        cachedParser = async (buffer: Buffer) => {
+          const result = await parser(buffer);
+          return { text: result.text };
+        };
         return cachedParser;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
