@@ -36,7 +36,15 @@ export async function POST(req: NextRequest) {
       linesWithAmounts: 0,
       linesWithTxnNos: 0,
       sampleLines: lines.slice(0, 20),
-      transactionCandidates: [] as any[],
+      transactionCandidates: [] as Array<{
+        lineNumber: number;
+        originalLine: string;
+        date: string;
+        amount: number;
+        description: string | null;
+        transactionNo: string | null;
+        hasDescription: boolean;
+      }>,
       rawText: text.substring(0, 2000) // First 2000 chars
     };
 
