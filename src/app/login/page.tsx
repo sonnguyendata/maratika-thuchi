@@ -72,43 +72,70 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow">
-        <h1 className="text-xl font-semibold mb-4">Sign in</h1>
-        <form onSubmit={onSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm mb-1">Email</label>
-            <input
-              type="email"
-              className="w-full rounded-md border px-3 py-2"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="email"
-              required
-            />
+    <main className="min-h-screen flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        {/* Logo and branding */}
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-accent-soft to-accent-warm flex items-center justify-center mx-auto mb-4">
+            <span className="text-3xl font-display">M</span>
           </div>
-          <div>
-            <label className="block text-sm mb-1">Password</label>
-            <input
-              type="password"
-              className="w-full rounded-md border px-3 py-2"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-              required
-            />
+          <h1 className="text-3xl font-display font-semibold text-foreground mb-2">Maratika Thuchi</h1>
+          <p className="text-foreground/70">Financial Management System</p>
+        </div>
+
+        {/* Login form */}
+        <div className="rounded-2xl bg-surface-1/50 backdrop-blur-sm border border-surface-2 p-8">
+          <h2 className="text-2xl font-display font-semibold text-foreground mb-6 text-center">Sign In</h2>
+          
+          <form onSubmit={onSubmit} className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">Email</label>
+              <input
+                type="email"
+                className="w-full rounded-xl bg-surface-2/50 border border-surface-2 px-4 py-3 text-foreground placeholder-foreground/50 focus:outline-none focus:ring-2 focus:ring-accent-soft/50 focus:border-accent-soft transition-all duration-200"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter your email"
+                autoComplete="email"
+                required
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">Password</label>
+              <input
+                type="password"
+                className="w-full rounded-xl bg-surface-2/50 border border-surface-2 px-4 py-3 text-foreground placeholder-foreground/50 focus:outline-none focus:ring-2 focus:ring-accent-soft/50 focus:border-accent-soft transition-all duration-200"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter your password"
+                autoComplete="current-password"
+                required
+              />
+            </div>
+
+            {error && (
+              <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20">
+                <p className="text-sm text-red-400">{error}</p>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={busy}
+              className="w-full rounded-xl bg-gradient-to-r from-accent-soft to-accent-warm text-white py-3 font-medium disabled:opacity-60 hover:shadow-lg hover:shadow-accent-soft/25 transition-all duration-200 disabled:hover:shadow-none"
+            >
+              {busy ? 'Signing in…' : 'Sign In'}
+            </button>
+          </form>
+
+          {/* Footer */}
+          <div className="mt-8 text-center">
+            <p className="text-sm text-foreground/60">
+              Welcome to your journey of financial clarity
+            </p>
           </div>
-
-          {error && <p className="text-sm text-red-600">{error}</p>}
-
-          <button
-            type="submit"
-            disabled={busy}
-            className="w-full rounded-md bg-black text-white py-2 disabled:opacity-60"
-          >
-            {busy ? 'Signing in…' : 'Sign in'}
-          </button>
-        </form>
+        </div>
       </div>
     </main>
   );
