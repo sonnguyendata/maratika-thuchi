@@ -17,18 +17,41 @@ export default async function AdminPage() {
   } = await supabase.auth.getUser();
 
   if (error || !user) {
+    console.log('Admin page: Auth error or no user:', error?.message);
     redirect('/login');
   }
 
   // Check if user has admin role in profiles table
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('role')
     .eq('user_id', user.id)
     .single();
 
-  if (!profile || profile.role !== 'admin') {
-    redirect('/'); // not an admin
+  if (profileError) {
+    console.log('Admin page: Profile query error:', profileError.message);
+    
+    // Fallback to email-based authentication
+    const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+    if (adminEmail && user.email === adminEmail) {
+      console.log('Admin page: Using email-based auth fallback for:', user.email);
+      // Continue to render admin page
+    } else {
+      redirect('/login');
+    }
+  } else if (!profile || profile.role !== 'admin') {
+    console.log('Admin page: User is not admin. Profile:', profile);
+    
+    // Fallback to email-based authentication
+    const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+    if (adminEmail && user.email === adminEmail) {
+      console.log('Admin page: Using email-based auth fallback for:', user.email);
+      // Continue to render admin page
+    } else {
+      redirect('/'); // not an admin
+    }
+  } else {
+    console.log('Admin page: User is admin:', user.email, profile.role);
   }
 
   return (
