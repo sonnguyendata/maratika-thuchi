@@ -26,6 +26,12 @@ const isUser = (value: unknown): value is User => {
 const isUserArray = (value: unknown): value is User[] =>
   Array.isArray(value) && value.every(isUser);
 
+const isUsersResponse = (value: unknown): value is { users: User[] } => {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return "users" in candidate && isUserArray(candidate.users);
+};
+
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [email, setEmail] = useState("");
@@ -43,7 +49,7 @@ export default function UsersPage() {
         setErr(isApiError(payload) ? payload.error : "Failed to load users");
         return;
       }
-      if (!isUserArray(payload.users)) {
+      if (!isUsersResponse(payload)) {
         setErr("Unexpected response from server");
         return;
       }
