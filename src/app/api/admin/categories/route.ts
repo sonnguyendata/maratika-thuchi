@@ -4,13 +4,24 @@ import { supabaseServer } from "@/lib/supabaseServer";
 
 async function ensureAdmin() {
   const supabase = await supabaseServer();
-  const { data: usr } = await supabase.auth.getUser();
-  const { data: me } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("user_id", usr?.user?.id ?? "")
-    .single();
-  return me?.role === "admin" ? supabase : null;
+  const { data: { user }, error } = await supabase.auth.getUser();
+  
+  if (error || !user) {
+    return null;
+  }
+
+  // Check admin email from environment variable
+  const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+  if (adminEmail && user.email !== adminEmail) {
+    return null;
+  }
+
+  // If no admin email is set, allow any authenticated user (for development)
+  if (!adminEmail) {
+    return supabase;
+  }
+
+  return supabase;
 }
 
 export async function GET() {

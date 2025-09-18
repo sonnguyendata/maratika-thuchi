@@ -79,7 +79,13 @@ describe('handleStatementPost', () => {
 
     const deps = createBaseDeps({
       parsePdf: async () => ({
-        text: ['2024-01-05 Grocery Store -12.34', '2024-01-06 Paycheck +200.00', 'Random line'].join('\n'),
+        text: [
+          '2024-01-05 Grocery Store -12.34', 
+          '2024-01-06 Paycheck +200.00',
+          '01/08/2025 CHUYỂN KHOẢN NHẬN TIỀN +500,000.00',
+          '02/08/2025 RÚT TIỀN ATM -200,000.00',
+          'Random line'
+        ].join('\n'),
       }),
       createSupabaseClient: () => ({
         from: (table: string) => {
@@ -119,8 +125,8 @@ describe('handleStatementPost', () => {
     const body = await response.json();
     expect(body).toMatchObject({
       statement_id: 42,
-      parsed_rows: 2,
-      inserted_rows: 2,
+      parsed_rows: 4,
+      inserted_rows: 4,
       ok: true,
     });
 
@@ -133,7 +139,9 @@ describe('handleStatementPost', () => {
     });
 
     expect(transactionBatches).toHaveLength(1);
-    expect(transactionBatches[0]).toHaveLength(2);
+    expect(transactionBatches[0]).toHaveLength(4);
+    
+    // Check the first transaction (US format)
     expect(transactionBatches[0][0]).toMatchObject({
       statement_id: 42,
       trx_date: '2024-01-05',
@@ -141,12 +149,32 @@ describe('handleStatementPost', () => {
       credit: 0,
       description: 'Grocery Store',
     });
+    
+    // Check the second transaction (US format)
     expect(transactionBatches[0][1]).toMatchObject({
       statement_id: 42,
       trx_date: '2024-01-06',
       credit: 200,
       debit: 0,
       description: 'Paycheck',
+    });
+    
+    // Check the third transaction (Vietnamese format)
+    expect(transactionBatches[0][2]).toMatchObject({
+      statement_id: 42,
+      trx_date: '2025-08-01',
+      credit: 500000,
+      debit: 0,
+      description: 'CHUYỂN KHOẢN NHẬN TIỀN',
+    });
+    
+    // Check the fourth transaction (Vietnamese format)
+    expect(transactionBatches[0][3]).toMatchObject({
+      statement_id: 42,
+      trx_date: '2025-08-02',
+      debit: 200000,
+      credit: 0,
+      description: 'RÚT TIỀN ATM',
     });
   });
 
@@ -157,7 +185,7 @@ describe('handleStatementPost', () => {
     form.set('accountName', 'Example');
 
     const deps = createBaseDeps({
-      parsePdf: async () => ({ text: '2024-01-05 Grocery -12.34\n2024-01-06 Paycheck +200.00' }),
+      parsePdf: async () => ({ text: '2024-01-05 Grocery -12.34\n2024-01-06 Paycheck +200.00\n01/08/2025 CHUYỂN KHOẢN +500,000.00' }),
       createSupabaseClient: () => ({
         from: (table: string) => {
           if (table === 'statements') {
@@ -186,7 +214,7 @@ describe('handleStatementPost', () => {
     expect(response.status).toBe(207);
     expect(await response.json()).toMatchObject({
       statement_id: 7,
-      parsed_rows: 2,
+      parsed_rows: 3,
       inserted_rows: 0,
       error: 'Insert error',
     });

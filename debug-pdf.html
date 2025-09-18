@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PDF Debug Tool</title>
+</head>
+<body>
+    <h1>PDF Debug Tool</h1>
+    <form id="debugForm">
+        <input type="file" id="pdfFile" accept=".pdf" required>
+        <button type="submit">Debug PDF</button>
+    </form>
+    
+    <div id="results" style="margin-top: 20px;"></div>
+
+    <script>
+        document.getElementById('debugForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const fileInput = document.getElementById('pdfFile');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert('Please select a PDF file');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch('/api/debug-pdf', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(result.error || 'Debug failed');
+                }
+
+                const resultsDiv = document.getElementById('results');
+                resultsDiv.innerHTML = `
+                    <h2>Debug Results</h2>
+                    <p><strong>File Size:</strong> ${result.fileSize} bytes</p>
+                    <p><strong>Text Length:</strong> ${result.textLength} characters</p>
+                    <p><strong>Total Lines:</strong> ${result.totalLines}</p>
+                    
+                    <h3>First 500 Characters:</h3>
+                    <pre style="background: #f5f5f5; padding: 10px; overflow-x: auto;">${result.first500Chars}</pre>
+                    
+                    <h3>First 20 Lines:</h3>
+                    <ol>
+                        ${result.first20Lines.map((line, i) => `<li>${line}</li>`).join('')}
+                    </ol>
+                    
+                    <h3>Lines with Dates (first 10):</h3>
+                    <ul>
+                        ${result.linesWithDates.map(item => `<li>Line ${item.lineNumber}: ${item.line} → ${item.match}</li>`).join('')}
+                    </ul>
+                    
+                    <h3>Lines with Amounts (first 10):</h3>
+                    <ul>
+                        ${result.linesWithAmounts.map(item => `<li>Line ${item.lineNumber}: ${item.line} → ${item.match}</li>`).join('')}
+                    </ul>
+                    
+                    <h3>Lines with Both Date and Amount (first 10):</h3>
+                    <ul>
+                        ${result.linesWithBoth.map(item => `<li>Line ${item.lineNumber}: ${item.line} → Date: ${item.dateMatch}, Amount: ${item.amountMatch}</li>`).join('')}
+                    </ul>
+                    
+                    <h3>Regex Patterns:</h3>
+                    <p><strong>Date:</strong> ${result.regexPatterns.date}</p>
+                    <p><strong>Amount:</strong> ${result.regexPatterns.amount}</p>
+                `;
+                
+            } catch (error) {
+                document.getElementById('results').innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+            }
+        });
+    </script>
+</body>
+</html>

@@ -73,9 +73,11 @@ type TransactionRow = {
   transaction_no: string | null;
 };
 
+// Enhanced regex patterns to handle multiple date formats including Vietnamese DD/MM/YYYY
 const dateRe =
-  /^(?<d>\d{1,2})[\/\-](?<m>\d{1,2})[\/\-](?<y>\d{4})\b|^(?<y2>\d{4})-(?<m2>\d{2})-(?<d2>\d{2})\b/;
-const amtRe = /[-+]?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})|\d+(?:\.\d{1,2})/;
+  /^(?<d>\d{1,2})[\/\-](?<m>\d{1,2})[\/\-](?<y>\d{4})\b|^(?<y2>\d{4})-(?<m2>\d{2})-(?<d2>\d{2})\b|(?<d3>\d{1,2})\/(?<m3>\d{1,2})\/(?<y3>\d{4})/;
+// Enhanced amount regex to handle Vietnamese format with commas and various decimal places
+const amtRe = /([+-]?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)/;
 
 function resolveStatementId(rawId: unknown): number | null {
   if (typeof rawId === 'number' && Number.isFinite(rawId)) return rawId;
@@ -148,26 +150,50 @@ export async function handleStatementPost(
       if (!dMatch || !aMatch) continue;
 
       const groups = dMatch.groups ?? {};
-      const year = groups.y2 ?? groups.y;
-      const month = groups.m2 ?? groups.m;
-      const day = groups.d2 ?? groups.d;
+      // Handle different date formats: YYYY-MM-DD, MM/DD/YYYY, DD/MM/YYYY (Vietnamese)
+      let year, month, day;
+      
+      if (groups.y2 && groups.m2 && groups.d2) {
+        // YYYY-MM-DD format
+        year = groups.y2;
+        month = groups.m2;
+        day = groups.d2;
+      } else if (groups.y3 && groups.m3 && groups.d3) {
+        // DD/MM/YYYY format (Vietnamese)
+        year = groups.y3;
+        month = groups.m3;
+        day = groups.d3;
+      } else if (groups.y && groups.m && groups.d) {
+        // MM/DD/YYYY format
+        year = groups.y;
+        month = groups.m;
+        day = groups.d;
+      } else {
+        continue;
+      }
+      
       if (!year || !month || !day) continue;
 
       const trxDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
 
       const amtStr = aMatch[0];
-      const raw = amtStr.replace(/,/g, '');
+      // Remove commas and handle Vietnamese currency format
+      const raw = amtStr.replace(/,/g, '').replace(/[^\d.-]/g, '');
       const amt = Number(raw);
       if (!Number.isFinite(amt)) continue;
 
       const credit = amt >= 0 ? amt : 0;
       const debit = amt < 0 ? Math.abs(amt) : 0;
 
+      // Extract description by removing date and amount from the line
       let description = line.replace(dateRe, '').trim();
+      // Remove the amount string from the description
       const tail = description.lastIndexOf(amtStr);
       if (tail >= 0) {
         description = description.slice(0, tail).trim();
       }
+      // Clean up Vietnamese text and remove extra spaces
+      description = description.replace(/\s+/g, ' ').trim();
       const normalizedDescription = description.length > 0 ? description : null;
 
       candidates.push({
