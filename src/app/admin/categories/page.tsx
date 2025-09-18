@@ -276,7 +276,7 @@ export default function CategoriesPage() {
         </div>
 
         <div className="text-sm text-foreground/60">
-          💡 Tip: If a category is "in use by transactions", delete will be blocked to protect data integrity.
+          💡 Tip: If a category is &quot;in use by transactions&quot;, delete will be blocked to protect data integrity.
         </div>
       </div>
     </Layout>
