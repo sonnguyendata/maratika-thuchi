@@ -1,6 +1,7 @@
 // src/app/api/transactions/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { ensureAdmin } from "@/lib/adminAuth";
+import { supabaseServer } from "@/lib/supabaseServer";
 
 export async function PATCH(
   _req: NextRequest,
