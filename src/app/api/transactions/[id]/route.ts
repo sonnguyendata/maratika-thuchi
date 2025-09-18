@@ -1,6 +1,6 @@
 // src/app/api/transactions/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabaseServer";
+import { ensureAdmin } from "@/lib/adminAuth";
 
 export async function PATCH(
   _req: NextRequest,
@@ -13,11 +13,8 @@ export async function PATCH(
   const body = await _req.json().catch(() => ({}));
   const { category_id, hidden } = body ?? {};
 
-  const supabase = await supabaseServer();
-
-  // Optional: verify current user is admin via profiles
-  const { data: me } = await supabase.from("profiles").select("role").eq("user_id", (await supabase.auth.getUser()).data.user?.id).single();
-  if (me?.role !== "admin") return NextResponse.json({ error: "Admins only" }, { status: 403 });
+  const supabase = await ensureAdmin();
+  if (!supabase) return NextResponse.json({ error: "Admins only" }, { status: 403 });
 
   const { error } = await supabase
     .from("transactions")

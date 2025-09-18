@@ -1,17 +1,10 @@
-// src/app/api/admin/transactions/list/route.ts
+// src/app/api/transactions/list/route.ts
 import { NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabaseServer";
+import { ensureAdmin } from "@/lib/adminAuth";
 
 export async function GET() {
-  const supabase = await supabaseServer();
-
-  // check admin
-  const { data: me } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("user_id", (await supabase.auth.getUser()).data.user?.id)
-    .single();
-  if (me?.role !== "admin") return NextResponse.json({ error: "Admins only" }, { status: 403 });
+  const supabase = await ensureAdmin();
+  if (!supabase) return NextResponse.json({ error: "Admins only" }, { status: 403 });
 
   const { data, error } = await supabase
     .from("transactions")
