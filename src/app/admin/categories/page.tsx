@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from "react";
+import Layout from '@/components/Layout';
 
 type CategoryType = "income" | "expense";
 type Category = { id: number; name: string; type: CategoryType; target_amount: number | null };
@@ -141,123 +142,143 @@ export default function CategoriesPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-semibold">Admin • Categories</h1>
+    <Layout 
+      title="Manage Categories" 
+      description="Create, edit, and organize transaction categories to better understand your spending patterns"
+    >
+      <div className="max-w-4xl space-y-6">
+        {err && (
+          <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20">
+            <p className="text-red-400">{err}</p>
+          </div>
+        )}
 
-      {err && <div className="p-3 border rounded text-red-600">{err}</div>}
+        {/* Create Category Form */}
+        <div className="rounded-2xl bg-surface-1/50 backdrop-blur-sm border border-surface-2 p-6">
+          <h3 className="text-lg font-display font-semibold text-foreground mb-4">Create Category</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <input
+              className="rounded-xl bg-surface-2/50 border border-surface-2 px-4 py-3 text-foreground placeholder-foreground/50 focus:outline-none focus:ring-2 focus:ring-accent-soft/50 focus:border-accent-soft transition-all duration-200"
+              placeholder="Category Name"
+              value={name}
+              onChange={e => setName(e.target.value)}
+            />
+            <select
+              className="rounded-xl bg-surface-2/50 border border-surface-2 px-4 py-3 text-foreground focus:outline-none focus:ring-2 focus:ring-accent-soft/50 focus:border-accent-soft transition-all duration-200"
+              value={type}
+              onChange={e => {
+                const next = e.target.value;
+                if (isCategoryType(next)) {
+                  setType(next);
+                }
+              }}
+            >
+              <option value="income">Income</option>
+              <option value="expense">Expense</option>
+            </select>
+            <input
+              className="rounded-xl bg-surface-2/50 border border-surface-2 px-4 py-3 text-foreground placeholder-foreground/50 focus:outline-none focus:ring-2 focus:ring-accent-soft/50 focus:border-accent-soft transition-all duration-200"
+              placeholder="Target amount (optional)"
+              value={target}
+              onChange={e => {
+                const parsed = parseTargetInput(e.target.value);
+                if (parsed === undefined) {
+                  return;
+                }
+                setTarget(parsed === null ? "" : parsed);
+              }}
+            />
+            <button 
+              onClick={add} 
+              className="rounded-xl bg-gradient-to-r from-accent-soft to-accent-warm text-white py-3 font-medium hover:shadow-lg hover:shadow-accent-soft/25 transition-all duration-200"
+            >
+              Add Category
+            </button>
+          </div>
+        </div>
 
-      <div className="p-4 border rounded">
-        <div className="text-lg font-medium mb-3">Create Category</div>
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-          <input
-            className="border rounded px-3 py-2"
-            placeholder="Name"
-            value={name}
-            onChange={e => setName(e.target.value)}
-          />
-          <select
-            className="border rounded px-3 py-2"
-            value={type}
-            onChange={e => {
-              const next = e.target.value;
-              if (isCategoryType(next)) {
-                setType(next);
-              }
-            }}
-          >
-            <option value="income">Income</option>
-            <option value="expense">Expense</option>
-          </select>
-          <input
-            className="border rounded px-3 py-2"
-            placeholder="Target amount (optional)"
-            value={target}
-            onChange={e => {
-              const parsed = parseTargetInput(e.target.value);
-              if (parsed === undefined) {
-                return;
-              }
-              setTarget(parsed === null ? "" : parsed);
-            }}
-          />
-          <button onClick={add} className="border rounded px-3 py-2 hover:bg-gray-50">
-            Add
-          </button>
+        {/* Categories Table */}
+        <div className="rounded-2xl bg-surface-1/50 backdrop-blur-sm border border-surface-2 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-surface-2/30">
+                <tr>
+                  <th className="text-left p-4 font-medium text-foreground">Type</th>
+                  <th className="text-left p-4 font-medium text-foreground">Name</th>
+                  <th className="text-right p-4 font-medium text-foreground">Target</th>
+                  <th className="text-right p-4 font-medium text-foreground">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(r => (
+                  <tr key={r.id} className="border-t border-surface-2">
+                    <td className="p-4">
+                      <select
+                        className="rounded-lg bg-surface-2/50 border border-surface-2 px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-accent-soft/50 focus:border-accent-soft transition-all duration-200"
+                        value={r.type}
+                        onChange={e => {
+                          const next = e.target.value;
+                          if (isCategoryType(next)) {
+                            editField(r.id, "type", next);
+                          }
+                        }}
+                      >
+                        <option value="income">Income</option>
+                        <option value="expense">Expense</option>
+                      </select>
+                    </td>
+                    <td className="p-4">
+                      <input
+                        className="rounded-lg bg-surface-2/50 border border-surface-2 px-3 py-2 text-foreground w-full focus:outline-none focus:ring-2 focus:ring-accent-soft/50 focus:border-accent-soft transition-all duration-200"
+                        value={r.name}
+                        onChange={e => editField(r.id, "name", e.target.value)}
+                      />
+                    </td>
+                    <td className="p-4 text-right">
+                      <input
+                        className="rounded-lg bg-surface-2/50 border border-surface-2 px-3 py-2 text-foreground text-right w-24 focus:outline-none focus:ring-2 focus:ring-accent-soft/50 focus:border-accent-soft transition-all duration-200"
+                        value={formatTargetValue(r.target_amount)}
+                        onChange={e => {
+                          const parsed = parseTargetInput(e.target.value);
+                          if (parsed === undefined) {
+                            return;
+                          }
+                          editField(r.id, "target_amount", parsed);
+                        }}
+                      />
+                    </td>
+                    <td className="p-4 text-right space-x-2">
+                      <button 
+                        onClick={() => save(r)} 
+                        className="rounded-lg bg-accent-soft/20 text-accent-soft px-3 py-2 hover:bg-accent-soft/30 transition-all duration-200"
+                      >
+                        Save
+                      </button>
+                      <button 
+                        onClick={() => remove(r.id)} 
+                        className="rounded-lg bg-red-500/20 text-red-400 px-3 py-2 hover:bg-red-500/30 transition-all duration-200"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {rows.length === 0 && (
+                  <tr>
+                    <td className="p-8 text-center text-foreground/60" colSpan={4}>
+                      No categories yet. Create your first category above.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="text-sm text-foreground/60">
+          💡 Tip: If a category is "in use by transactions", delete will be blocked to protect data integrity.
         </div>
       </div>
-
-      <div className="border rounded overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="text-left p-2">Type</th>
-              <th className="text-left p-2">Name</th>
-              <th className="text-right p-2">Target</th>
-              <th className="text-right p-2">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(r => (
-              <tr key={r.id} className="border-t">
-                <td className="p-2">
-                  <select
-                    className="border rounded px-2 py-1"
-                    value={r.type}
-                    onChange={e => {
-                      const next = e.target.value;
-                      if (isCategoryType(next)) {
-                        editField(r.id, "type", next);
-                      }
-                    }}
-                  >
-                    <option value="income">Income</option>
-                    <option value="expense">Expense</option>
-                  </select>
-                </td>
-                <td className="p-2">
-                  <input
-                    className="border rounded px-2 py-1 w-full"
-                    value={r.name}
-                    onChange={e => editField(r.id, "name", e.target.value)}
-                  />
-                </td>
-                <td className="p-2 text-right">
-                  <input
-                    className="border rounded px-2 py-1 text-right"
-                    value={formatTargetValue(r.target_amount)}
-                    onChange={e => {
-                      const parsed = parseTargetInput(e.target.value);
-                      if (parsed === undefined) {
-                        return;
-                      }
-                      editField(r.id, "target_amount", parsed);
-                    }}
-                  />
-                </td>
-                <td className="p-2 text-right space-x-2">
-                  <button onClick={() => save(r)} className="border rounded px-2 py-1 hover:bg-gray-50">
-                    Save
-                  </button>
-                  <button onClick={() => remove(r.id)} className="border rounded px-2 py-1 hover:bg-gray-50">
-                    Delete
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {rows.length === 0 && (
-              <tr>
-                <td className="p-3 text-gray-500" colSpan={4}>
-                  No categories yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="text-sm text-gray-500">
-        Tip: If a category is “in use by transactions”, delete will be blocked to protect data.
-      </div>
-    </div>
+    </Layout>
   );
 }
