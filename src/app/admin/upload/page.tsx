@@ -2,6 +2,7 @@
 'use client';
 
 import { useState } from 'react';
+import Layout from '@/components/Layout';
 
 type ErrorPayload = { error: string };
 
@@ -65,48 +66,67 @@ export default function UploadPage() {
   }
 
   return (
-    <div className="p-6 space-y-4">
-      <h1 className="text-xl font-semibold">Upload Statement</h1>
+    <Layout 
+      title="Upload Statement" 
+      description="Parse bank statement PDFs and extract transaction data automatically"
+    >
+      <div className="max-w-2xl">
+        <form onSubmit={onSubmit} className="space-y-6">
+          <div className="rounded-2xl bg-surface-1/50 backdrop-blur-sm border border-surface-2 p-6">
+            <h3 className="text-lg font-display font-semibold text-foreground mb-4">Statement Details</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">Account Name</label>
+                <input
+                  className="w-full rounded-xl bg-surface-2/50 border border-surface-2 px-4 py-3 text-foreground placeholder-foreground/50 focus:outline-none focus:ring-2 focus:ring-accent-soft/50 focus:border-accent-soft transition-all duration-200"
+                  value={accountName}
+                  onChange={(e) => setAccountName(e.target.value)}
+                  placeholder="e.g. Cherry's Techcombank"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">PDF File</label>
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                    className="w-full rounded-xl bg-surface-2/50 border border-surface-2 px-4 py-3 text-foreground file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-accent-soft/20 file:text-accent-soft hover:file:bg-accent-soft/30 transition-all duration-200"
+                  />
+                </div>
+                <p className="text-sm text-foreground/60 mt-2">
+                  Supports Vietnamese bank statements with DD/MM/YYYY date format
+                </p>
+              </div>
+            </div>
+          </div>
 
-      <form onSubmit={onSubmit} className="space-y-3">
-        <div>
-          <label className="block text-sm font-medium mb-1">Account Name</label>
-          <input
-            className="border rounded px-3 py-2 w-full"
-            value={accountName}
-            onChange={(e) => setAccountName(e.target.value)}
-            placeholder="e.g. Cherry's Techcombank"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">PDF File</label>
-          <input
-            type="file"
-            accept="application/pdf"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          />
-        </div>
+          <button
+            type="submit"
+            disabled={busy}
+            className="w-full rounded-xl bg-gradient-to-r from-accent-soft to-accent-warm text-white py-3 font-medium disabled:opacity-60 hover:shadow-lg hover:shadow-accent-soft/25 transition-all duration-200 disabled:hover:shadow-none"
+          >
+            {busy ? 'Uploading…' : 'Upload Statement'}
+          </button>
+        </form>
 
-        <button
-          type="submit"
-          disabled={busy}
-          className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-50"
-        >
-          {busy ? 'Uploading…' : 'Upload'}
-        </button>
-      </form>
+        {error && (
+          <div className="mt-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20">
+            <p className="text-red-400">{error}</p>
+          </div>
+        )}
 
-      {error && (
-        <div className="text-red-600 mt-2">
-          {error}
-        </div>
-      )}
-
-      {result !== null && (
-        <pre className="mt-3 p-3 bg-gray-50 border rounded text-sm overflow-auto">
-{JSON.stringify(result, null, 2)}
-        </pre>
-      )}
-    </div>
+        {result !== null && (
+          <div className="mt-6 rounded-2xl bg-surface-1/50 backdrop-blur-sm border border-surface-2 p-6">
+            <h3 className="text-lg font-display font-semibold text-foreground mb-4">Upload Result</h3>
+            <pre className="text-sm text-foreground/80 overflow-auto bg-surface-2/30 rounded-xl p-4">
+              {JSON.stringify(result, null, 2)}
+            </pre>
+          </div>
+        )}
+      </div>
+    </Layout>
   );
 }
