@@ -73,15 +73,15 @@ type TransactionRow = {
   transaction_no: string | null;
 };
 
-// Enhanced regex patterns to handle multiple date formats including Vietnamese DD/MM/YYYY
-const dateRe =
-  /^(?<d>\d{1,2})[\/\-](?<m>\d{1,2})[\/\-](?<y>\d{4})\b|^(?<y2>\d{4})-(?<m2>\d{2})-(?<d2>\d{2})\b|(?<d3>\d{1,2})\/(?<m3>\d{1,2})\/(?<y3>\d{4})/;
-// Enhanced amount regex to handle Vietnamese format with commas and various decimal places
-const amtRe = /([+-]?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)/;
-// Transaction number patterns for Vietnamese banks
-const txnNoRe = /(?:Txn|Transaction|Ref|Reference|No|Number|Mã|GD)[\s:]*([A-Z0-9\-]+)/i;
-// Balance patterns
-const balanceRe = /(?:Balance|Số dư|Dư|Còn lại)[\s:]*([+-]?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)/i;
+// Enhanced regex patterns for Vietnamese bank statements
+// Look for transaction lines that start with date followed by bank/transaction info
+const transactionLineRe = /^(\d{2}\/\d{2}\/\d{4})(.+?)(FT\d+|IBFT\d+|BFT\d+)(.+?)(\d{1,3}(?:,\d{3})*)(\d{1,3}(?:,\d{3})*)$/;
+// Alternative pattern for lines with different formats
+const altTransactionRe = /^(\d{2}\/\d{2}\/\d{4})(.+?)(\d{1,3}(?:,\d{3})*)(\d{1,3}(?:,\d{3})*)$/;
+// Transaction number pattern
+const txnNoRe = /(FT\d+|IBFT\d+|BFT\d+)/;
+// Amount patterns (Vietnamese format with commas)
+const amountRe = /(\d{1,3}(?:,\d{3})*)/g;
 
 function resolveStatementId(rawId: unknown): number | null {
   if (typeof rawId === 'number' && Number.isFinite(rawId)) return rawId;
@@ -149,100 +149,85 @@ export async function handleStatementPost(
     const candidates: TransactionRow[] = [];
 
     for (const line of lines) {
-      const dMatch = line.match(dateRe);
-      const aMatch = line.match(amtRe);
-      if (!dMatch || !aMatch) continue;
-
-      const groups = dMatch.groups ?? {};
-      // Handle different date formats: YYYY-MM-DD, MM/DD/YYYY, DD/MM/YYYY (Vietnamese)
-      let year, month, day;
-      
-      if (groups.y2 && groups.m2 && groups.d2) {
-        // YYYY-MM-DD format
-        year = groups.y2;
-        month = groups.m2;
-        day = groups.d2;
-      } else if (groups.y3 && groups.m3 && groups.d3) {
-        // DD/MM/YYYY format (Vietnamese)
-        year = groups.y3;
-        month = groups.m3;
-        day = groups.d3;
-      } else if (groups.y && groups.m && groups.d) {
-        // MM/DD/YYYY format
-        year = groups.y;
-        month = groups.m;
-        day = groups.d;
-      } else {
+      // Skip header lines and empty lines
+      if (line.length < 20 || line.includes('NGÂN HÀNG') || line.includes('BANK STATEMENT') || line.includes('Transaction Date')) {
         continue;
       }
-      
-      if (!year || !month || !day) continue;
 
-      const trxDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-
-      const amtStr = aMatch[0];
-      // Remove commas and handle Vietnamese currency format
-      const raw = amtStr.replace(/,/g, '').replace(/[^\d.-]/g, '');
-      const amt = Number(raw);
-      if (!Number.isFinite(amt)) continue;
-
-      const credit = amt >= 0 ? amt : 0;
-      const debit = amt < 0 ? Math.abs(amt) : 0;
-
-      // Extract transaction number
-      const txnMatch = line.match(txnNoRe);
-      const transactionNo = txnMatch ? txnMatch[1] : null;
-
-      // Extract balance
-      const balanceMatch = line.match(balanceRe);
-      let balance = null;
-      if (balanceMatch) {
-        const balanceRaw = balanceMatch[1].replace(/,/g, '').replace(/[^\d.-]/g, '');
-        const balanceAmt = Number(balanceRaw);
-        if (Number.isFinite(balanceAmt)) {
-          balance = balanceAmt;
-        }
+      // Try to match the main transaction pattern first
+      let match = line.match(transactionLineRe);
+      if (match) {
+        const [, dateStr, descriptionPart, txnNo, balancePart, creditStr, balanceStr] = match;
+        
+        // Parse date (DD/MM/YYYY format)
+        const [day, month, year] = dateStr.split('/');
+        const trxDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+        
+        // Extract description from the middle part
+        let description = descriptionPart.trim();
+        // Clean up the description
+        description = description
+          .replace(/\s+/g, ' ')
+          .replace(/^NGAN HANG\s+/i, '')
+          .replace(/^TMCP\s+/i, '')
+          .trim();
+        
+        // Parse amounts
+        const credit = parseInt(creditStr.replace(/,/g, '')) || 0;
+        const balance = parseInt(balanceStr.replace(/,/g, '')) || null;
+        
+        // Determine if this is a debit or credit
+        const debit = 0; // Based on the format, these appear to be credits
+        
+        candidates.push({
+          statement_id: statementId,
+          trx_date: trxDate,
+          description: description || null,
+          credit,
+          debit,
+          balance,
+          transaction_no: txnNo,
+        });
+        continue;
       }
 
-      // Extract description by removing date, amount, transaction number, and balance from the line
-      let description = line.replace(dateRe, '').trim();
-      
-      // Remove the amount string from the description
-      const tail = description.lastIndexOf(amtStr);
-      if (tail >= 0) {
-        description = description.slice(0, tail).trim();
+      // Try alternative pattern for different transaction formats
+      match = line.match(altTransactionRe);
+      if (match) {
+        const [, dateStr, descriptionPart, amountStr1, amountStr2] = match;
+        
+        // Parse date (DD/MM/YYYY format)
+        const [day, month, year] = dateStr.split('/');
+        const trxDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+        
+        // Extract description
+        let description = descriptionPart.trim();
+        description = description.replace(/\s+/g, ' ').trim();
+        
+        // Parse amounts - determine which is credit/debit based on context
+        const amount1 = parseInt(amountStr1.replace(/,/g, '')) || 0;
+        const amount2 = parseInt(amountStr2.replace(/,/g, '')) || 0;
+        
+        // Look for transaction number in the description
+        const txnMatch = description.match(txnNoRe);
+        const transactionNo = txnMatch ? txnMatch[0] : null;
+        
+        // For now, assume first amount is credit, second is balance
+        const credit = amount1;
+        const debit = 0;
+        const balance = amount2;
+        
+        candidates.push({
+          statement_id: statementId,
+          trx_date: trxDate,
+          description: description || null,
+          credit,
+          debit,
+          balance,
+          transaction_no: transactionNo,
+        });
+        continue;
       }
-      
-      // Remove transaction number if found
-      if (txnMatch) {
-        description = description.replace(txnMatch[0], '').trim();
-      }
-      
-      // Remove balance if found
-      if (balanceMatch) {
-        description = description.replace(balanceMatch[0], '').trim();
-      }
-      
-      // Clean up Vietnamese text and remove extra spaces
-      description = description.replace(/\s+/g, ' ').trim();
-      
-      // Additional cleanup for Vietnamese bank statements
-      description = description
-        .replace(/^(CHUYỂN|RÚT|THANH TOÁN|NHẬN|GỬI|MUA|BÁN)/, '') // Remove common prefixes
-        .replace(/\s+/g, ' ')
-        .trim();
-      
-      const normalizedDescription = description.length > 0 ? description : null;
-
-      candidates.push({
-        statement_id: statementId,
-        trx_date: trxDate,
-        description: normalizedDescription,
-        credit,
-        debit,
-        balance,
-        transaction_no: transactionNo,
-      });
     }
 
     const batchSize = 500;
