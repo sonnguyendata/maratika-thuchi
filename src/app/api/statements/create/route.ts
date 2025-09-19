@@ -204,15 +204,36 @@ export async function handleStatementPost(
           continue;
         }
         
-        // Look for amounts (credit and balance)
+        // Look for amounts (credit, debit, and balance)
         const amountMatch = nextLine.match(/^(\d{1,3}(?:,\d{3})*)$/);
         if (amountMatch) {
           const amount = parseInt(amountMatch[1].replace(/,/g, ''));
           if (amount > 0) {
-            if (credit === 0) {
-              credit = amount;
-            } else if (balance === 0) {
-              balance = amount;
+            // Check if this is a debit transaction by looking at the description
+            const isDebit = description.toLowerCase().includes('rút') || 
+                           description.toLowerCase().includes('thanh toán') ||
+                           description.toLowerCase().includes('mua') ||
+                           description.toLowerCase().includes('phí') ||
+                           description.toLowerCase().includes('fee') ||
+                           description.toLowerCase().includes('charge');
+            
+            if (isDebit) {
+              // This is a debit transaction
+              if (credit === 0 && balance === 0) {
+                // First amount is the debit amount
+                credit = 0;
+                balance = amount;
+              } else if (balance > 0) {
+                // Second amount is the new balance
+                balance = amount;
+              }
+            } else {
+              // This is a credit transaction
+              if (credit === 0) {
+                credit = amount;
+              } else if (balance === 0) {
+                balance = amount;
+              }
             }
           }
           continue;
@@ -228,8 +249,8 @@ export async function handleStatementPost(
         }
       }
       
-      // Skip if we don't have both credit and balance
-      if (credit === 0 || balance === 0) continue;
+      // Skip if we don't have a balance
+      if (balance === 0) continue;
       
       // Clean up description
       description = description
@@ -239,12 +260,33 @@ export async function handleStatementPost(
         .replace(/\\BNK.*$/, '') // Remove \BNK and everything after
         .trim();
 
+      // Determine if this is a debit or credit transaction
+      const isDebit = description.toLowerCase().includes('rút') || 
+                     description.toLowerCase().includes('thanh toán') ||
+                     description.toLowerCase().includes('mua') ||
+                     description.toLowerCase().includes('phí') ||
+                     description.toLowerCase().includes('fee') ||
+                     description.toLowerCase().includes('charge');
+
+      let finalCredit = 0;
+      let finalDebit = 0;
+      
+      if (isDebit) {
+        // For debit transactions, the first amount is the debit amount
+        finalDebit = credit; // credit variable contains the debit amount
+        finalCredit = 0;
+      } else {
+        // For credit transactions
+        finalCredit = credit;
+        finalDebit = 0;
+      }
+
       candidates.push({
         statement_id: statementId,
         trx_date: trxDate,
         description: description || null,
-        credit,
-        debit: 0, // These appear to be credit transactions
+        credit: finalCredit,
+        debit: finalDebit,
         balance,
         transaction_no: transactionNo,
       });
