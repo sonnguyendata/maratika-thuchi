@@ -152,7 +152,7 @@ export async function handleStatementPost(
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       
-      // Skip header lines and empty lines
+      // Skip header lines, empty lines, and summary lines
       if (line.length < 5 || 
           line.includes('NGÂN HÀNG') || 
           line.includes('BANK STATEMENT') || 
@@ -170,7 +170,13 @@ export async function handleStatementPost(
           line.includes('Có TKTT') ||
           line.includes('Credit') ||
           line.includes('Số dư') ||
-          line.includes('Balance')) {
+          line.includes('Balance') ||
+          line.includes('Ending balance') ||
+          line.includes('TECHCOMBANK Tra lai') ||
+          line.includes('Ngày giao dịch: Là ngày') ||
+          line.includes('Số dư: Là số dư') ||
+          line.includes('Transaction Date: is the next') ||
+          line.includes('Balance: is total power')) {
         continue;
       }
 
@@ -233,8 +239,8 @@ export async function handleStatementPost(
         }
       }
       
-      // Skip if we don't have a balance
-      if (balance === 0) continue;
+      // Skip if we don't have a balance or if this looks like a summary line
+      if (balance === 0 || description.includes('TECHCOMBANK Tra lai') || description.includes('Ending balance')) continue;
       
       // Clean up description
       description = description
