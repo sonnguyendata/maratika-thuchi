@@ -185,10 +185,11 @@ export async function handleStatementPost(
       // Look ahead to find the transaction data (next 5-10 lines)
       let description = '';
       let transactionNo = null;
+      let debit = 0;
       let credit = 0;
       let balance = 0;
       
-      // Collect description lines (skip the date line)
+      // Collect transaction data
       for (let j = i + 1; j < Math.min(i + 10, lines.length); j++) {
         const nextLine = lines[j];
         
@@ -204,36 +205,19 @@ export async function handleStatementPost(
           continue;
         }
         
-        // Look for amounts (credit, debit, and balance)
+        // Look for amounts - these could be debit, credit, or balance
         const amountMatch = nextLine.match(/^(\d{1,3}(?:,\d{3})*)$/);
         if (amountMatch) {
           const amount = parseInt(amountMatch[1].replace(/,/g, ''));
           if (amount > 0) {
-            // Check if this is a debit transaction by looking at the description
-            const isDebit = description.toLowerCase().includes('rút') || 
-                           description.toLowerCase().includes('thanh toán') ||
-                           description.toLowerCase().includes('mua') ||
-                           description.toLowerCase().includes('phí') ||
-                           description.toLowerCase().includes('fee') ||
-                           description.toLowerCase().includes('charge');
-            
-            if (isDebit) {
-              // This is a debit transaction
-              if (credit === 0 && balance === 0) {
-                // First amount is the debit amount
-                credit = 0;
-                balance = amount;
-              } else if (balance > 0) {
-                // Second amount is the new balance
-                balance = amount;
-              }
-            } else {
-              // This is a credit transaction
-              if (credit === 0) {
-                credit = amount;
-              } else if (balance === 0) {
-                balance = amount;
-              }
+            // Determine which column this amount belongs to based on position
+            // In Vietnamese bank statements: Debit, Credit, Balance
+            if (debit === 0) {
+              debit = amount;
+            } else if (credit === 0) {
+              credit = amount;
+            } else if (balance === 0) {
+              balance = amount;
             }
           }
           continue;
@@ -260,33 +244,12 @@ export async function handleStatementPost(
         .replace(/\\BNK.*$/, '') // Remove \BNK and everything after
         .trim();
 
-      // Determine if this is a debit or credit transaction
-      const isDebit = description.toLowerCase().includes('rút') || 
-                     description.toLowerCase().includes('thanh toán') ||
-                     description.toLowerCase().includes('mua') ||
-                     description.toLowerCase().includes('phí') ||
-                     description.toLowerCase().includes('fee') ||
-                     description.toLowerCase().includes('charge');
-
-      let finalCredit = 0;
-      let finalDebit = 0;
-      
-      if (isDebit) {
-        // For debit transactions, the first amount is the debit amount
-        finalDebit = credit; // credit variable contains the debit amount
-        finalCredit = 0;
-      } else {
-        // For credit transactions
-        finalCredit = credit;
-        finalDebit = 0;
-      }
-
       candidates.push({
         statement_id: statementId,
         trx_date: trxDate,
         description: description || null,
-        credit: finalCredit,
-        debit: finalDebit,
+        credit,
+        debit,
         balance,
         transaction_no: transactionNo,
       });
