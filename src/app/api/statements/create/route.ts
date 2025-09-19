@@ -148,16 +148,29 @@ export async function handleStatementPost(
 
     const candidates: TransactionRow[] = [];
 
-    for (const line of lines) {
+    // Process multi-line transactions
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      
       // Skip header lines and empty lines
-      if (line.length < 20 || 
+      if (line.length < 5 || 
           line.includes('NGÂN HÀNG') || 
           line.includes('BANK STATEMENT') || 
           line.includes('Transaction Date') ||
           line.includes('SỔ PHỤ') ||
           line.includes('Customer name') ||
           line.includes('Account no') ||
-          line.includes('Opening balance')) {
+          line.includes('Opening balance') ||
+          line.includes('Diễn giải') ||
+          line.includes('Details') ||
+          line.includes('Số bút toán') ||
+          line.includes('Transaction No') ||
+          line.includes('Nợ TKTT') ||
+          line.includes('Debit') ||
+          line.includes('Có TKTT') ||
+          line.includes('Credit') ||
+          line.includes('Số dư') ||
+          line.includes('Balance')) {
         continue;
       }
 
@@ -165,40 +178,58 @@ export async function handleStatementPost(
       const dateMatch = line.match(dateRe);
       if (!dateMatch) continue;
 
-      // Extract all amounts from the line
-      const amounts: number[] = [];
-      let amountMatch;
-      while ((amountMatch = amountRe.exec(line)) !== null) {
-        const amount = parseInt(amountMatch[1].replace(/,/g, ''));
-        if (amount > 0) {
-          amounts.push(amount);
-        }
-      }
-
-      // Skip if we don't have at least 2 amounts (credit and balance)
-      if (amounts.length < 2) continue;
-
       // Parse date (DD/MM/YYYY format)
       const [day, month, year] = dateMatch[1].split('/');
       const trxDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
 
-      // Extract transaction number
-      const txnMatch = line.match(txnNoRe);
-      const transactionNo = txnMatch ? txnMatch[1] : null;
-
-      // Extract description by removing date, amounts, and transaction number
-      let description = line.replace(dateRe, '').trim();
+      // Look ahead to find the transaction data (next 5-10 lines)
+      let description = '';
+      let transactionNo = null;
+      let credit = 0;
+      let balance = 0;
       
-      // Remove transaction number if found
-      if (txnMatch) {
-        description = description.replace(txnMatch[0], '').trim();
+      // Collect description lines (skip the date line)
+      for (let j = i + 1; j < Math.min(i + 10, lines.length); j++) {
+        const nextLine = lines[j];
+        
+        // Stop if we hit another date (start of next transaction)
+        if (nextLine.match(dateRe)) {
+          break;
+        }
+        
+        // Look for transaction number
+        const txnMatch = nextLine.match(txnNoRe);
+        if (txnMatch) {
+          transactionNo = txnMatch[1];
+          continue;
+        }
+        
+        // Look for amounts (credit and balance)
+        const amountMatch = nextLine.match(/^(\d{1,3}(?:,\d{3})*)$/);
+        if (amountMatch) {
+          const amount = parseInt(amountMatch[1].replace(/,/g, ''));
+          if (amount > 0) {
+            if (credit === 0) {
+              credit = amount;
+            } else if (balance === 0) {
+              balance = amount;
+            }
+          }
+          continue;
+        }
+        
+        // Collect description text (skip empty lines and amounts)
+        if (nextLine.length > 3 && !nextLine.match(/^\d+$/) && !nextLine.includes('\\BNK')) {
+          if (description) {
+            description += ' ' + nextLine;
+          } else {
+            description = nextLine;
+          }
+        }
       }
       
-      // Remove amounts from description
-      amounts.forEach(amount => {
-        const amountStr = amount.toLocaleString('en-US');
-        description = description.replace(amountStr, '').trim();
-      });
+      // Skip if we don't have both credit and balance
+      if (credit === 0 || balance === 0) continue;
       
       // Clean up description
       description = description
@@ -208,21 +239,18 @@ export async function handleStatementPost(
         .replace(/\\BNK.*$/, '') // Remove \BNK and everything after
         .trim();
 
-      // Use the largest amount as credit, second largest as balance
-      const sortedAmounts = amounts.sort((a, b) => b - a);
-      const credit = sortedAmounts[0] || 0;
-      const balance = sortedAmounts[1] || null;
-      const debit = 0; // These appear to be credit transactions
-
       candidates.push({
         statement_id: statementId,
         trx_date: trxDate,
         description: description || null,
         credit,
-        debit,
+        debit: 0, // These appear to be credit transactions
         balance,
         transaction_no: transactionNo,
       });
+      
+      // Skip the lines we've already processed
+      i += 5; // Skip ahead to avoid reprocessing the same transaction
     }
 
     const batchSize = 500;
