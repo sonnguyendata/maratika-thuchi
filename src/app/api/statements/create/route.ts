@@ -74,14 +74,14 @@ type TransactionRow = {
 };
 
 // Enhanced regex patterns for Vietnamese bank statements
-// Look for transaction lines that start with date followed by bank/transaction info
-const transactionLineRe = /^(\d{2}\/\d{2}\/\d{4})(.+?)(FT\d+|IBFT\d+|BFT\d+)(.+?)(\d{1,3}(?:,\d{3})*)(\d{1,3}(?:,\d{3})*)$/;
-// Alternative pattern for lines with different formats
-const altTransactionRe = /^(\d{2}\/\d{2}\/\d{4})(.+?)(\d{1,3}(?:,\d{3})*)(\d{1,3}(?:,\d{3})*)$/;
-// Transaction number pattern
+// Look for lines that start with date and contain transaction info
+const dateRe = /^(\d{2}\/\d{2}\/\d{4})/;
+// Transaction number pattern (more flexible)
 const txnNoRe = /(FT\d+|IBFT\d+|BFT\d+)/;
 // Amount patterns (Vietnamese format with commas)
 const amountRe = /(\d{1,3}(?:,\d{3})*)/g;
+// Look for lines that have both date and amounts
+const transactionLineRe = /^(\d{2}\/\d{2}\/\d{4}).*?(\d{1,3}(?:,\d{3})*).*?(\d{1,3}(?:,\d{3})*)$/;
 
 function resolveStatementId(rawId: unknown): number | null {
   if (typeof rawId === 'number' && Number.isFinite(rawId)) return rawId;
@@ -150,84 +150,79 @@ export async function handleStatementPost(
 
     for (const line of lines) {
       // Skip header lines and empty lines
-      if (line.length < 20 || line.includes('NGÂN HÀNG') || line.includes('BANK STATEMENT') || line.includes('Transaction Date')) {
+      if (line.length < 20 || 
+          line.includes('NGÂN HÀNG') || 
+          line.includes('BANK STATEMENT') || 
+          line.includes('Transaction Date') ||
+          line.includes('SỔ PHỤ') ||
+          line.includes('Customer name') ||
+          line.includes('Account no') ||
+          line.includes('Opening balance')) {
         continue;
       }
 
-      // Try to match the main transaction pattern first
-      let match = line.match(transactionLineRe);
-      if (match) {
-        const [, dateStr, descriptionPart, txnNo, balancePart, creditStr, balanceStr] = match;
-        
-        // Parse date (DD/MM/YYYY format)
-        const [day, month, year] = dateStr.split('/');
-        const trxDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-        
-        // Extract description from the middle part
-        let description = descriptionPart.trim();
-        // Clean up the description
-        description = description
-          .replace(/\s+/g, ' ')
-          .replace(/^NGAN HANG\s+/i, '')
-          .replace(/^TMCP\s+/i, '')
-          .trim();
-        
-        // Parse amounts
-        const credit = parseInt(creditStr.replace(/,/g, '')) || 0;
-        const balance = parseInt(balanceStr.replace(/,/g, '')) || null;
-        
-        // Determine if this is a debit or credit
-        const debit = 0; // Based on the format, these appear to be credits
-        
-        candidates.push({
-          statement_id: statementId,
-          trx_date: trxDate,
-          description: description || null,
-          credit,
-          debit,
-          balance,
-          transaction_no: txnNo,
-        });
-        continue;
+      // Check if line starts with a date
+      const dateMatch = line.match(dateRe);
+      if (!dateMatch) continue;
+
+      // Extract all amounts from the line
+      const amounts: number[] = [];
+      let amountMatch;
+      while ((amountMatch = amountRe.exec(line)) !== null) {
+        const amount = parseInt(amountMatch[1].replace(/,/g, ''));
+        if (amount > 0) {
+          amounts.push(amount);
+        }
       }
 
-      // Try alternative pattern for different transaction formats
-      match = line.match(altTransactionRe);
-      if (match) {
-        const [, dateStr, descriptionPart, amountStr1, amountStr2] = match;
-        
-        // Parse date (DD/MM/YYYY format)
-        const [day, month, year] = dateStr.split('/');
-        const trxDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-        
-        // Extract description
-        let description = descriptionPart.trim();
-        description = description.replace(/\s+/g, ' ').trim();
-        
-        // Parse amounts - determine which is credit/debit based on context
-        const amount1 = parseInt(amountStr1.replace(/,/g, '')) || 0;
-        const amount2 = parseInt(amountStr2.replace(/,/g, '')) || 0;
-        
-        // Look for transaction number in the description
-        const txnMatch = description.match(txnNoRe);
-        const transactionNo = txnMatch ? txnMatch[0] : null;
-        
-        // For now, assume first amount is credit, second is balance
-        const credit = amount1;
-        const debit = 0;
-        const balance = amount2;
-        
-        candidates.push({
-          statement_id: statementId,
-          trx_date: trxDate,
-          description: description || null,
-          credit,
-          debit,
-          balance,
-          transaction_no: transactionNo,
-        });
-        continue;
+      // Skip if we don't have at least 2 amounts (credit and balance)
+      if (amounts.length < 2) continue;
+
+      // Parse date (DD/MM/YYYY format)
+      const [day, month, year] = dateMatch[1].split('/');
+      const trxDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+
+      // Extract transaction number
+      const txnMatch = line.match(txnNoRe);
+      const transactionNo = txnMatch ? txnMatch[1] : null;
+
+      // Extract description by removing date, amounts, and transaction number
+      let description = line.replace(dateRe, '').trim();
+      
+      // Remove transaction number if found
+      if (txnMatch) {
+        description = description.replace(txnMatch[0], '').trim();
       }
+      
+      // Remove amounts from description
+      amounts.forEach(amount => {
+        const amountStr = amount.toLocaleString('en-US');
+        description = description.replace(amountStr, '').trim();
+      });
+      
+      // Clean up description
+      description = description
+        .replace(/\s+/g, ' ')
+        .replace(/^NGAN HANG\s+/i, '')
+        .replace(/^TMCP\s+/i, '')
+        .replace(/\\BNK.*$/, '') // Remove \BNK and everything after
+        .trim();
+
+      // Use the largest amount as credit, second largest as balance
+      const sortedAmounts = amounts.sort((a, b) => b - a);
+      const credit = sortedAmounts[0] || 0;
+      const balance = sortedAmounts[1] || null;
+      const debit = 0; // These appear to be credit transactions
+
+      candidates.push({
+        statement_id: statementId,
+        trx_date: trxDate,
+        description: description || null,
+        credit,
+        debit,
+        balance,
+        transaction_no: transactionNo,
+      });
     }
 
     const batchSize = 500;
