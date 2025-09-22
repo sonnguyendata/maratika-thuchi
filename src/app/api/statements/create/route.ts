@@ -305,19 +305,12 @@ export async function handleStatementPost(
           
           // Look for amounts if we don't have them yet
           if (debit === 0 && credit === 0) {
-            const amounts = nextLine.match(amountRe);
-            if (amounts) {
-              const parsedAmounts = amounts.map(amt => parseInt(amt.replace(/,/g, ''))).filter(amt => amt > 0);
-              if (parsedAmounts.length >= 2) {
-                if (parsedAmounts.length === 3) {
-                  debit = parsedAmounts[0];
-                  credit = parsedAmounts[1];
-                  balance = parsedAmounts[2];
-                } else if (parsedAmounts.length === 2) {
-                  debit = parsedAmounts[0];
-                  balance = parsedAmounts[1];
-                }
-              }
+            const nextLineAmounts = parseAmounts(nextLine);
+            if (nextLineAmounts.length > 0) {
+              const nextLineResult = determineDebitCredit(nextLine, nextLineAmounts);
+              debit = nextLineResult.debit;
+              credit = nextLineResult.credit;
+              balance = nextLineResult.balance;
             }
           }
           
