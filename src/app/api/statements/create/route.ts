@@ -246,7 +246,7 @@ export async function handleStatementPost(
       console.log(`Parsed amounts:`, parsedAmounts);
       
       // Determine debit/credit using helper function
-      const { debit, credit, balance } = determineDebitCredit(line, parsedAmounts);
+      let { debit, credit, balance } = determineDebitCredit(line, parsedAmounts);
       console.log(`Amounts: debit=${debit}, credit=${credit}, balance=${balance}`);
       
       // Look for transaction number - try multiple patterns
