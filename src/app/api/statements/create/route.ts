@@ -148,29 +148,17 @@ export async function handleStatementPost(
 
     const candidates: TransactionRow[] = [];
 
-    // Process multi-line transactions
+    // More flexible parsing logic - try multiple approaches
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       
-      // Skip header lines, empty lines, and summary lines
+      // Skip obviously non-transaction lines
       if (line.length < 5 || 
           line.includes('NGÂN HÀNG') || 
           line.includes('BANK STATEMENT') || 
-          line.includes('Transaction Date') ||
-          line.includes('SỔ PHỤ') ||
           line.includes('Customer name') ||
           line.includes('Account no') ||
           line.includes('Opening balance') ||
-          line.includes('Diễn giải') ||
-          line.includes('Details') ||
-          line.includes('Số bút toán') ||
-          line.includes('Transaction No') ||
-          line.includes('Nợ TKTT') ||
-          line.includes('Debit') ||
-          line.includes('Có TKTT') ||
-          line.includes('Credit') ||
-          line.includes('Số dư') ||
-          line.includes('Balance') ||
           line.includes('Ending balance') ||
           line.includes('TECHCOMBANK Tra lai') ||
           line.includes('Ngày giao dịch: Là ngày') ||
@@ -188,80 +176,235 @@ export async function handleStatementPost(
       const [day, month, year] = dateMatch[1].split('/');
       const trxDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
 
-      // Look ahead to find the transaction data (next 5-10 lines)
+      // Try to parse transaction from current line
       let description = '';
       let transactionNo = null;
       let debit = 0;
       let credit = 0;
       let balance = 0;
       
-      // Collect transaction data
-      for (let j = i + 1; j < Math.min(i + 10, lines.length); j++) {
-        const nextLine = lines[j];
+      // Extract all amounts from the line
+      const amounts = line.match(amountRe);
+      if (amounts) {
+        const parsedAmounts = amounts.map(amt => parseInt(amt.replace(/,/g, ''))).filter(amt => amt > 0);
         
-        // Stop if we hit another date (start of next transaction)
-        if (nextLine.match(dateRe)) {
-          break;
-        }
-        
-        // Look for transaction number
-        const txnMatch = nextLine.match(txnNoRe);
-        if (txnMatch) {
-          transactionNo = txnMatch[1];
-          continue;
-        }
-        
-        // Look for amounts - these could be debit, credit, or balance
-        const amountMatch = nextLine.match(/^(\d{1,3}(?:,\d{3})*)$/);
-        if (amountMatch) {
-          const amount = parseInt(amountMatch[1].replace(/,/g, ''));
-          if (amount > 0) {
-            // Determine which column this amount belongs to based on position
-            // In Vietnamese bank statements: Debit, Credit, Balance
-            if (debit === 0) {
-              debit = amount;
-            } else if (credit === 0) {
-              credit = amount;
-            } else if (balance === 0) {
-              balance = amount;
+        // Try different amount arrangements
+        if (parsedAmounts.length >= 2) {
+          // Common patterns: [debit, credit, balance] or [amount, balance]
+          if (parsedAmounts.length === 3) {
+            debit = parsedAmounts[0];
+            credit = parsedAmounts[1];
+            balance = parsedAmounts[2];
+          } else if (parsedAmounts.length === 2) {
+            // Determine if it's debit or credit based on context
+            const lineText = line.toLowerCase();
+            if (lineText.includes('chi') || lineText.includes('rut') || lineText.includes('debit')) {
+              debit = parsedAmounts[0];
+              balance = parsedAmounts[1];
+            } else if (lineText.includes('thu') || lineText.includes('nap') || lineText.includes('credit')) {
+              credit = parsedAmounts[0];
+              balance = parsedAmounts[1];
+            } else {
+              // Default: assume first is debit, second is balance
+              debit = parsedAmounts[0];
+              balance = parsedAmounts[1];
             }
-          }
-          continue;
-        }
-        
-        // Collect description text (skip empty lines and amounts)
-        if (nextLine.length > 3 && !nextLine.match(/^\d+$/) && !nextLine.includes('\\BNK')) {
-          if (description) {
-            description += ' ' + nextLine;
-          } else {
-            description = nextLine;
           }
         }
       }
       
-      // Skip if we don't have a balance or if this looks like a summary line
-      if (balance === 0 || description.includes('TECHCOMBANK Tra lai') || description.includes('Ending balance')) continue;
+      // Look for transaction number
+      const txnMatch = line.match(txnNoRe);
+      if (txnMatch) {
+        transactionNo = txnMatch[1];
+      }
       
-      // Clean up description
-      description = description
-        .replace(/\s+/g, ' ')
-        .replace(/^NGAN HANG\s+/i, '')
-        .replace(/^TMCP\s+/i, '')
-        .replace(/\\BNK.*$/, '') // Remove \BNK and everything after
-        .trim();
+      // Extract description - remove date, amounts, and transaction number
+      let lineDescription = line.replace(dateRe, '').trim();
+      if (amounts) {
+        amounts.forEach(amt => {
+          lineDescription = lineDescription.replace(amt, '').trim();
+        });
+      }
+      if (txnMatch) {
+        lineDescription = lineDescription.replace(txnMatch[1], '').trim();
+      }
+      lineDescription = lineDescription.replace(/\s+/g, ' ').trim();
+      
+      if (lineDescription && lineDescription.length > 3) {
+        description = lineDescription;
+      }
+      
+      // If we don't have enough data, look at next lines
+      if (!description || (debit === 0 && credit === 0)) {
+        for (let j = i + 1; j < Math.min(i + 3, lines.length); j++) {
+          const nextLine = lines[j];
+          
+          // Stop if we hit another date
+          if (nextLine.match(dateRe)) {
+            break;
+          }
+          
+          // Look for transaction number
+          if (!transactionNo) {
+            const txnMatch = nextLine.match(txnNoRe);
+            if (txnMatch) {
+              transactionNo = txnMatch[1];
+            }
+          }
+          
+          // Look for amounts if we don't have them yet
+          if (debit === 0 && credit === 0) {
+            const amounts = nextLine.match(amountRe);
+            if (amounts) {
+              const parsedAmounts = amounts.map(amt => parseInt(amt.replace(/,/g, ''))).filter(amt => amt > 0);
+              if (parsedAmounts.length >= 2) {
+                if (parsedAmounts.length === 3) {
+                  debit = parsedAmounts[0];
+                  credit = parsedAmounts[1];
+                  balance = parsedAmounts[2];
+                } else if (parsedAmounts.length === 2) {
+                  debit = parsedAmounts[0];
+                  balance = parsedAmounts[1];
+                }
+              }
+            }
+          }
+          
+          // Collect description text
+          if (!description && nextLine.length > 3 && !nextLine.match(/^\d+$/) && !nextLine.includes('\\BNK')) {
+            description = nextLine.trim();
+          }
+        }
+      }
+      
+      // Create transaction if we have meaningful data
+      if (description && description.length > 3) {
+        // Clean up description
+        description = description
+          .replace(/\s+/g, ' ')
+          .replace(/^NGAN HANG\s+/i, '')
+          .replace(/^TMCP\s+/i, '')
+          .replace(/\\BNK.*$/, '')
+          .trim();
 
-      candidates.push({
-        statement_id: statementId,
-        trx_date: trxDate,
-        description: description || null,
-        credit,
-        debit,
-        balance,
-        transaction_no: transactionNo,
-      });
+        candidates.push({
+          statement_id: statementId,
+          trx_date: trxDate,
+          description: description || null,
+          credit,
+          debit,
+          balance,
+          transaction_no: transactionNo,
+        });
+      }
+    }
+
+    // If no candidates found with the main logic, try a more permissive approach
+    if (candidates.length === 0) {
+      console.log('No candidates found with main logic, trying fallback approach...');
       
-      // Skip the lines we've already processed
-      i += 5; // Skip ahead to avoid reprocessing the same transaction
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        
+        // Only skip obviously non-transaction lines
+        if (line.length < 5 || 
+            line.includes('NGÂN HÀNG') || 
+            line.includes('BANK STATEMENT') || 
+            line.includes('Customer name') ||
+            line.includes('Account no') ||
+            line.includes('Opening balance') ||
+            line.includes('Ending balance')) {
+          continue;
+        }
+
+        // Check if line contains a date anywhere
+        const dateMatch = line.match(/(\d{2}\/\d{2}\/\d{4})/);
+        if (!dateMatch) continue;
+
+        // Parse date (DD/MM/YYYY format)
+        const [day, month, year] = dateMatch[1].split('/');
+        const trxDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+
+        // Extract all amounts from the line
+        const amounts = line.match(amountRe);
+        if (!amounts || amounts.length < 1) continue;
+        
+        const parsedAmounts = amounts.map(amt => parseInt(amt.replace(/,/g, ''))).filter(amt => amt > 0);
+        if (parsedAmounts.length === 0) continue;
+
+        // Look for transaction number
+        const txnMatch = line.match(txnNoRe);
+        const transactionNo = txnMatch ? txnMatch[1] : null;
+        
+        // Extract description - remove date, amounts, and transaction number
+        let description = line.replace(/(\d{2}\/\d{2}\/\d{4})/, '').trim();
+        if (amounts) {
+          amounts.forEach(amt => {
+            description = description.replace(amt, '').trim();
+          });
+        }
+        if (txnMatch) {
+          description = description.replace(txnMatch[1], '').trim();
+        }
+        description = description.replace(/\s+/g, ' ').trim();
+        
+        if (description && description.length > 3) {
+          // Determine debit/credit based on amounts
+          let debit = 0;
+          let credit = 0;
+          let balance = 0;
+          
+          if (parsedAmounts.length >= 3) {
+            debit = parsedAmounts[0];
+            credit = parsedAmounts[1];
+            balance = parsedAmounts[2];
+          } else if (parsedAmounts.length === 2) {
+            // Try to determine based on context
+            const lineText = line.toLowerCase();
+            if (lineText.includes('chi') || lineText.includes('rut') || lineText.includes('debit')) {
+              debit = parsedAmounts[0];
+              balance = parsedAmounts[1];
+            } else if (lineText.includes('thu') || lineText.includes('nap') || lineText.includes('credit')) {
+              credit = parsedAmounts[0];
+              balance = parsedAmounts[1];
+            } else {
+              // Default: assume first is debit, second is balance
+              debit = parsedAmounts[0];
+              balance = parsedAmounts[1];
+            }
+          } else if (parsedAmounts.length === 1) {
+            // Single amount - try to determine if it's debit or credit
+            const lineText = line.toLowerCase();
+            if (lineText.includes('chi') || lineText.includes('rut') || lineText.includes('debit')) {
+              debit = parsedAmounts[0];
+            } else if (lineText.includes('thu') || lineText.includes('nap') || lineText.includes('credit')) {
+              credit = parsedAmounts[0];
+            } else {
+              // Default to debit
+              debit = parsedAmounts[0];
+            }
+          }
+
+          // Clean up description
+          description = description
+            .replace(/\s+/g, ' ')
+            .replace(/^NGAN HANG\s+/i, '')
+            .replace(/^TMCP\s+/i, '')
+            .replace(/\\BNK.*$/, '')
+            .trim();
+
+          candidates.push({
+            statement_id: statementId,
+            trx_date: trxDate,
+            description: description || null,
+            credit,
+            debit,
+            balance,
+            transaction_no: transactionNo,
+          });
+        }
+      }
     }
 
     const batchSize = 500;
@@ -356,6 +499,11 @@ export async function handleStatementPost(
       parsed_rows: candidates.length,
       inserted_rows: inserted,
       ok: true,
+      debug: {
+        total_lines: lines.length,
+        candidates_sample: candidates.slice(0, 3),
+        lines_with_dates: lines.filter(line => line.match(dateRe)).slice(0, 5)
+      }
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
