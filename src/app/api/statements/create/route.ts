@@ -76,10 +76,12 @@ type TransactionRow = {
 // Enhanced regex patterns for Vietnamese bank statements
 // Look for lines that start with date and contain transaction info
 const dateRe = /^(\d{2}\/\d{2}\/\d{4})/;
-// Transaction number pattern (more flexible)
-const txnNoRe = /(FT\d+|IBFT\d+|BFT\d+)/;
-// Amount patterns (Vietnamese format with commas)
-const amountRe = /(\d{1,3}(?:,\d{3})*)/g;
+// More flexible transaction number pattern - Vietnamese banks use various formats
+const txnNoRe = /(FT\d+|IBFT\d+|BFT\d+|TXN\d+|GD\d+|REF\d+|\d{10,})/;
+// More flexible amount patterns - handle various formats
+const amountRe = /(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/g;
+// Alternative amount pattern for amounts without commas
+const amountReSimple = /(\d+(?:\.\d{2})?)/g;
 // Look for lines that have both date and amounts
 const transactionLineRe = /^(\d{2}\/\d{2}\/\d{4}).*?(\d{1,3}(?:,\d{3})*).*?(\d{1,3}(?:,\d{3})*)$/;
 
@@ -148,6 +150,63 @@ export async function handleStatementPost(
 
     const candidates: TransactionRow[] = [];
 
+    // Helper function to parse amounts from text
+    function parseAmounts(text: string): number[] {
+      // Try multiple amount patterns
+      let amounts = text.match(amountRe);
+      if (!amounts || amounts.length === 0) {
+        amounts = text.match(amountReSimple);
+      }
+      
+      if (amounts) {
+        return amounts.map(amt => {
+          const cleanAmt = amt.replace(/,/g, '');
+          const num = parseFloat(cleanAmt);
+          return Math.round(num);
+        }).filter(amt => amt > 0);
+      }
+      return [];
+    }
+
+    // Helper function to determine debit/credit from Vietnamese keywords
+    function determineDebitCredit(text: string, amounts: number[]): { debit: number; credit: number; balance: number } {
+      const lineText = text.toLowerCase();
+      let debit = 0;
+      let credit = 0;
+      let balance = 0;
+      
+      if (amounts.length >= 3) {
+        debit = amounts[0];
+        credit = amounts[1];
+        balance = amounts[2];
+      } else if (amounts.length === 2) {
+        if (lineText.includes('chi') || lineText.includes('rut') || lineText.includes('debit') ||
+            lineText.includes('thanh toan') || lineText.includes('chuyen tien') || lineText.includes('rut tien')) {
+          debit = amounts[0];
+          balance = amounts[1];
+        } else if (lineText.includes('thu') || lineText.includes('nap') || lineText.includes('credit') ||
+                   lineText.includes('nhan tien') || lineText.includes('nap tien') || lineText.includes('thu tien')) {
+          credit = amounts[0];
+          balance = amounts[1];
+        } else {
+          debit = amounts[0];
+          balance = amounts[1];
+        }
+      } else if (amounts.length === 1) {
+        if (lineText.includes('chi') || lineText.includes('rut') || lineText.includes('debit') ||
+            lineText.includes('thanh toan') || lineText.includes('chuyen tien') || lineText.includes('rut tien')) {
+          debit = amounts[0];
+        } else if (lineText.includes('thu') || lineText.includes('nap') || lineText.includes('credit') ||
+                   lineText.includes('nhan tien') || lineText.includes('nap tien') || lineText.includes('thu tien')) {
+          credit = amounts[0];
+        } else {
+          debit = amounts[0];
+        }
+      }
+      
+      return { debit, credit, balance };
+    }
+
     // More flexible parsing logic - try multiple approaches
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -179,56 +238,47 @@ export async function handleStatementPost(
       // Try to parse transaction from current line
       let description = '';
       let transactionNo = null;
-      let debit = 0;
-      let credit = 0;
-      let balance = 0;
       
-      // Extract all amounts from the line
-      const amounts = line.match(amountRe);
-      if (amounts) {
-        const parsedAmounts = amounts.map(amt => parseInt(amt.replace(/,/g, ''))).filter(amt => amt > 0);
-        
-        // Try different amount arrangements
-        if (parsedAmounts.length >= 2) {
-          // Common patterns: [debit, credit, balance] or [amount, balance]
-          if (parsedAmounts.length === 3) {
-            debit = parsedAmounts[0];
-            credit = parsedAmounts[1];
-            balance = parsedAmounts[2];
-          } else if (parsedAmounts.length === 2) {
-            // Determine if it's debit or credit based on context
-            const lineText = line.toLowerCase();
-            if (lineText.includes('chi') || lineText.includes('rut') || lineText.includes('debit')) {
-              debit = parsedAmounts[0];
-              balance = parsedAmounts[1];
-            } else if (lineText.includes('thu') || lineText.includes('nap') || lineText.includes('credit')) {
-              credit = parsedAmounts[0];
-              balance = parsedAmounts[1];
-            } else {
-              // Default: assume first is debit, second is balance
-              debit = parsedAmounts[0];
-              balance = parsedAmounts[1];
-            }
-          }
-        }
+      console.log(`Line ${i}: "${line}"`);
+      
+      // Parse amounts using helper function
+      const parsedAmounts = parseAmounts(line);
+      console.log(`Parsed amounts:`, parsedAmounts);
+      
+      // Determine debit/credit using helper function
+      const { debit, credit, balance } = determineDebitCredit(line, parsedAmounts);
+      console.log(`Amounts: debit=${debit}, credit=${credit}, balance=${balance}`);
+      
+      // Look for transaction number - try multiple patterns
+      let txnMatch = line.match(txnNoRe);
+      console.log(`Transaction number match:`, txnMatch);
+      
+      // If no transaction number found, look for any long number sequence
+      if (!txnMatch) {
+        const longNumberRe = /(\d{8,})/;
+        txnMatch = line.match(longNumberRe);
+        console.log(`Long number match:`, txnMatch);
       }
       
-      // Look for transaction number
-      const txnMatch = line.match(txnNoRe);
       if (txnMatch) {
         transactionNo = txnMatch[1];
+        console.log(`Found transaction number: ${transactionNo}`);
       }
       
       // Extract description - remove date, amounts, and transaction number
       let lineDescription = line.replace(dateRe, '').trim();
-      if (amounts) {
-        amounts.forEach(amt => {
-          lineDescription = lineDescription.replace(amt, '').trim();
-        });
-      }
+      
+      // Remove amounts from description
+      const amountsInLine = line.match(amountRe) || line.match(amountReSimple) || [];
+      amountsInLine.forEach(amt => {
+        lineDescription = lineDescription.replace(amt, '').trim();
+      });
+      
+      // Remove transaction number from description
       if (txnMatch) {
         lineDescription = lineDescription.replace(txnMatch[1], '').trim();
       }
+      
       lineDescription = lineDescription.replace(/\s+/g, ' ').trim();
       
       if (lineDescription && lineDescription.length > 3) {
@@ -326,65 +376,37 @@ export async function handleStatementPost(
         const [day, month, year] = dateMatch[1].split('/');
         const trxDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
 
-        // Extract all amounts from the line
-        const amounts = line.match(amountRe);
-        if (!amounts || amounts.length < 1) continue;
-        
-        const parsedAmounts = amounts.map(amt => parseInt(amt.replace(/,/g, ''))).filter(amt => amt > 0);
+        // Parse amounts using helper function
+        const parsedAmounts = parseAmounts(line);
         if (parsedAmounts.length === 0) continue;
 
-        // Look for transaction number
-        const txnMatch = line.match(txnNoRe);
+        // Look for transaction number - try multiple patterns
+        let txnMatch = line.match(txnNoRe);
+        if (!txnMatch) {
+          const longNumberRe = /(\d{8,})/;
+          txnMatch = line.match(longNumberRe);
+        }
         const transactionNo = txnMatch ? txnMatch[1] : null;
         
         // Extract description - remove date, amounts, and transaction number
         let description = line.replace(/(\d{2}\/\d{2}\/\d{4})/, '').trim();
-        if (amounts) {
-          amounts.forEach(amt => {
-            description = description.replace(amt, '').trim();
-          });
-        }
+        
+        // Remove amounts from description
+        const amountsInLine = line.match(amountRe) || line.match(amountReSimple) || [];
+        amountsInLine.forEach(amt => {
+          description = description.replace(amt, '').trim();
+        });
+        
+        // Remove transaction number from description
         if (txnMatch) {
           description = description.replace(txnMatch[1], '').trim();
         }
+        
         description = description.replace(/\s+/g, ' ').trim();
         
         if (description && description.length > 3) {
-          // Determine debit/credit based on amounts
-          let debit = 0;
-          let credit = 0;
-          let balance = 0;
-          
-          if (parsedAmounts.length >= 3) {
-            debit = parsedAmounts[0];
-            credit = parsedAmounts[1];
-            balance = parsedAmounts[2];
-          } else if (parsedAmounts.length === 2) {
-            // Try to determine based on context
-            const lineText = line.toLowerCase();
-            if (lineText.includes('chi') || lineText.includes('rut') || lineText.includes('debit')) {
-              debit = parsedAmounts[0];
-              balance = parsedAmounts[1];
-            } else if (lineText.includes('thu') || lineText.includes('nap') || lineText.includes('credit')) {
-              credit = parsedAmounts[0];
-              balance = parsedAmounts[1];
-            } else {
-              // Default: assume first is debit, second is balance
-              debit = parsedAmounts[0];
-              balance = parsedAmounts[1];
-            }
-          } else if (parsedAmounts.length === 1) {
-            // Single amount - try to determine if it's debit or credit
-            const lineText = line.toLowerCase();
-            if (lineText.includes('chi') || lineText.includes('rut') || lineText.includes('debit')) {
-              debit = parsedAmounts[0];
-            } else if (lineText.includes('thu') || lineText.includes('nap') || lineText.includes('credit')) {
-              credit = parsedAmounts[0];
-            } else {
-              // Default to debit
-              debit = parsedAmounts[0];
-            }
-          }
+          // Determine debit/credit using helper function
+          const { debit, credit, balance } = determineDebitCredit(line, parsedAmounts);
 
           // Clean up description
           description = description
