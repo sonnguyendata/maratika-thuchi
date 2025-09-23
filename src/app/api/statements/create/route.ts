@@ -76,12 +76,12 @@ type TransactionRow = {
 // Enhanced regex patterns for Vietnamese bank statements
 // Look for lines that start with date and contain transaction info
 const dateRe = /^(\d{2}\/\d{2}\/\d{4})/;
-// More flexible transaction number pattern - Vietnamese banks use various formats
-const txnNoRe = /(FT\d+|IBFT\d+|BFT\d+|TXN\d+|GD\d+|REF\d+|\d{10,})/;
-// More flexible amount patterns - handle various formats
-const amountRe = /(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/g;
+// Transaction number pattern for Vietnamese banks - FT followed by digits, optionally ending with \BNK
+const txnNoRe = /(FT\d+(?:\\BNK)?|IBFT\d+(?:\\BNK)?|BFT\d+(?:\\BNK)?)/;
+// Amount patterns - Vietnamese format with commas as thousands separators
+const amountRe = /(\d{1,3}(?:,\d{3})*)/g;
 // Alternative amount pattern for amounts without commas
-const amountReSimple = /(\d+(?:\.\d{2})?)/g;
+const amountReSimple = /(\d+)/g;
 // Look for lines that have both date and amounts
 const transactionLineRe = /^(\d{2}\/\d{2}\/\d{4}).*?(\d{1,3}(?:,\d{3})*).*?(\d{1,3}(?:,\d{3})*)$/;
 
@@ -207,7 +207,7 @@ export async function handleStatementPost(
       return { debit, credit, balance };
     }
 
-    // More flexible parsing logic - try multiple approaches
+    // Parse Vietnamese bank statement format
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       
@@ -235,50 +235,69 @@ export async function handleStatementPost(
       const [day, month, year] = dateMatch[1].split('/');
       const trxDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
 
-      // Try to parse transaction from current line
+      console.log(`Processing line ${i}: "${line}"`);
+
+      // For Vietnamese bank statements, we need to parse the structured format
+      // The line should contain: Date, Remitter, Remitter Bank, Details, Transaction No, Debit, Credit, Balance
+      
       let description = '';
       let transactionNo = null;
+      let debit = 0;
+      let credit = 0;
+      let balance = 0;
       
-      console.log(`Line ${i}: "${line}"`);
-      
-      // Parse amounts using helper function
-      const parsedAmounts = parseAmounts(line);
-      console.log(`Parsed amounts:`, parsedAmounts);
-      
-      // Determine debit/credit using helper function
-      let { debit, credit, balance } = determineDebitCredit(line, parsedAmounts);
-      console.log(`Amounts: debit=${debit}, credit=${credit}, balance=${balance}`);
-      
-      // Look for transaction number - try multiple patterns
-      let txnMatch = line.match(txnNoRe);
-      console.log(`Transaction number match:`, txnMatch);
-      
-      // If no transaction number found, look for any long number sequence
-      if (!txnMatch) {
-        const longNumberRe = /(\d{8,})/;
-        txnMatch = line.match(longNumberRe);
-        console.log(`Long number match:`, txnMatch);
-      }
-      
+      // Look for transaction number first
+      const txnMatch = line.match(txnNoRe);
       if (txnMatch) {
         transactionNo = txnMatch[1];
         console.log(`Found transaction number: ${transactionNo}`);
       }
       
-      // Extract description - remove date, amounts, and transaction number
+      // Parse amounts from the line
+      const amounts = line.match(amountRe);
+      console.log(`Amounts found:`, amounts);
+      
+      if (amounts && amounts.length >= 2) {
+        // In Vietnamese bank statements, typically: Credit, Balance
+        // Debit is usually empty for credit transactions
+        const parsedAmounts = amounts.map(amt => parseInt(amt.replace(/,/g, ''))).filter(amt => amt > 0);
+        console.log(`Parsed amounts:`, parsedAmounts);
+        
+        if (parsedAmounts.length >= 2) {
+          // First amount is usually credit, second is balance
+          credit = parsedAmounts[0];
+          balance = parsedAmounts[1];
+          console.log(`Set credit=${credit}, balance=${balance}`);
+        } else if (parsedAmounts.length === 1) {
+          // Single amount - determine if it's debit or credit based on context
+          const lineText = line.toLowerCase();
+          if (lineText.includes('chi') || lineText.includes('rut') || lineText.includes('debit') ||
+              lineText.includes('thanh toan') || lineText.includes('chuyen tien') || lineText.includes('rut tien')) {
+            debit = parsedAmounts[0];
+            console.log(`Set debit=${debit}`);
+          } else {
+            credit = parsedAmounts[0];
+            console.log(`Set credit=${credit}`);
+          }
+        }
+      }
+      
+      // Extract description by removing date, amounts, and transaction number
       let lineDescription = line.replace(dateRe, '').trim();
       
       // Remove amounts from description
-      const amountsInLine = line.match(amountRe) || line.match(amountReSimple) || [];
-      amountsInLine.forEach(amt => {
-        lineDescription = lineDescription.replace(amt, '').trim();
-      });
+      if (amounts) {
+        amounts.forEach(amt => {
+          lineDescription = lineDescription.replace(amt, '').trim();
+        });
+      }
       
       // Remove transaction number from description
       if (txnMatch) {
         lineDescription = lineDescription.replace(txnMatch[1], '').trim();
       }
       
+      // Clean up description
       lineDescription = lineDescription.replace(/\s+/g, ' ').trim();
       
       if (lineDescription && lineDescription.length > 3) {
@@ -305,12 +324,13 @@ export async function handleStatementPost(
           
           // Look for amounts if we don't have them yet
           if (debit === 0 && credit === 0) {
-            const nextLineAmounts = parseAmounts(nextLine);
-            if (nextLineAmounts.length > 0) {
-              const nextLineResult = determineDebitCredit(nextLine, nextLineAmounts);
-              debit = nextLineResult.debit;
-              credit = nextLineResult.credit;
-              balance = nextLineResult.balance;
+            const nextLineAmounts = nextLine.match(amountRe);
+            if (nextLineAmounts && nextLineAmounts.length >= 2) {
+              const parsedAmounts = nextLineAmounts.map(amt => parseInt(amt.replace(/,/g, ''))).filter(amt => amt > 0);
+              if (parsedAmounts.length >= 2) {
+                credit = parsedAmounts[0];
+                balance = parsedAmounts[1];
+              }
             }
           }
           
@@ -322,7 +342,7 @@ export async function handleStatementPost(
       }
       
       // Create transaction if we have meaningful data
-      if (description && description.length > 3) {
+      if (description && description.length > 3 && (debit > 0 || credit > 0)) {
         // Clean up description
         description = description
           .replace(/\s+/g, ' ')
@@ -330,6 +350,8 @@ export async function handleStatementPost(
           .replace(/^TMCP\s+/i, '')
           .replace(/\\BNK.*$/, '')
           .trim();
+
+        console.log(`Creating transaction: date=${trxDate}, description="${description}", credit=${credit}, debit=${debit}, balance=${balance}, txnNo=${transactionNo}`);
 
         candidates.push({
           statement_id: statementId,
@@ -373,12 +395,8 @@ export async function handleStatementPost(
         const parsedAmounts = parseAmounts(line);
         if (parsedAmounts.length === 0) continue;
 
-        // Look for transaction number - try multiple patterns
-        let txnMatch = line.match(txnNoRe);
-        if (!txnMatch) {
-          const longNumberRe = /(\d{8,})/;
-          txnMatch = line.match(longNumberRe);
-        }
+        // Look for transaction number
+        const txnMatch = line.match(txnNoRe);
         const transactionNo = txnMatch ? txnMatch[1] : null;
         
         // Extract description - remove date, amounts, and transaction number
