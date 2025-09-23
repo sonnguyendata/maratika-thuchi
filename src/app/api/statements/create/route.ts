@@ -253,18 +253,28 @@ export async function handleStatementPost(
         console.log(`Found transaction number: ${transactionNo}`);
       }
       
-      // Parse amounts from the line
-      const amounts = line.match(amountRe);
-      console.log(`Amounts found:`, amounts);
+      // Parse amounts from the line - try multiple patterns
+      let amounts = line.match(amountRe);
+      console.log(`Amounts found (with commas):`, amounts);
       
-      if (amounts && amounts.length >= 2) {
-        // In Vietnamese bank statements, typically: Credit, Balance
-        // Debit is usually empty for credit transactions
-        const parsedAmounts = amounts.map(amt => parseInt(amt.replace(/,/g, ''))).filter(amt => amt > 0);
+      // If no amounts found with comma pattern, try simple pattern
+      if (!amounts || amounts.length === 0) {
+        amounts = line.match(amountReSimple);
+        console.log(`Amounts found (simple):`, amounts);
+      }
+      
+      if (amounts && amounts.length > 0) {
+        const parsedAmounts = amounts.map(amt => {
+          // Remove commas and convert to number
+          const cleanAmt = amt.replace(/,/g, '');
+          const num = parseFloat(cleanAmt);
+          return Math.round(num); // Convert to integer
+        }).filter(amt => amt > 0);
         console.log(`Parsed amounts:`, parsedAmounts);
         
         if (parsedAmounts.length >= 2) {
-          // First amount is usually credit, second is balance
+          // In Vietnamese bank statements, typically: Credit, Balance
+          // Debit is usually empty for credit transactions
           credit = parsedAmounts[0];
           balance = parsedAmounts[1];
           console.log(`Set credit=${credit}, balance=${balance}`);
@@ -304,6 +314,8 @@ export async function handleStatementPost(
         description = lineDescription;
       }
       
+      console.log(`Extracted description: "${description}"`);
+      
       // If we don't have enough data, look at next lines
       if (!description || (debit === 0 && credit === 0)) {
         for (let j = i + 1; j < Math.min(i + 3, lines.length); j++) {
@@ -324,9 +336,16 @@ export async function handleStatementPost(
           
           // Look for amounts if we don't have them yet
           if (debit === 0 && credit === 0) {
-            const nextLineAmounts = nextLine.match(amountRe);
+            let nextLineAmounts = nextLine.match(amountRe);
+            if (!nextLineAmounts || nextLineAmounts.length === 0) {
+              nextLineAmounts = nextLine.match(amountReSimple);
+            }
             if (nextLineAmounts && nextLineAmounts.length >= 2) {
-              const parsedAmounts = nextLineAmounts.map(amt => parseInt(amt.replace(/,/g, ''))).filter(amt => amt > 0);
+              const parsedAmounts = nextLineAmounts.map(amt => {
+                const cleanAmt = amt.replace(/,/g, '');
+                const num = parseFloat(cleanAmt);
+                return Math.round(num);
+              }).filter(amt => amt > 0);
               if (parsedAmounts.length >= 2) {
                 credit = parsedAmounts[0];
                 balance = parsedAmounts[1];
